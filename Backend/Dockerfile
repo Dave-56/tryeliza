@@ -1,19 +1,16 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files and install all dependencies
+# Copy package files and install dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Copy application code
+# Copy all files
 COPY . .
-
-# Create dist directory and copy src to dist (bypass TypeScript compilation)
-RUN mkdir -p dist && cp -r src/* dist/
 
 # Expose the port your app runs on
 EXPOSE 5001
 
-# Start the application
-CMD ["npm", "run", "start:prod"]
+# Start the application with tsx (TypeScript executor)
+CMD ["npx", "tsx", "src/app.ts"]
