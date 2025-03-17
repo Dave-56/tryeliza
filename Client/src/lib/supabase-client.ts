@@ -38,6 +38,21 @@ export const signOut = async () => {
   return await supabase.auth.signOut();
 };
 
+
+// Function to request a password reset
+export const requestPasswordReset = async (email: string) => {
+  return await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+};
+
+// Function to update password after reset
+export const updatePassword = async (newPassword: string) => {
+  return await supabase.auth.updateUser({
+    password: newPassword
+  });
+};
+
 export const refreshSession = async () => {
   return await supabase.auth.refreshSession();
 };

@@ -22,6 +22,7 @@ import { z } from "zod";
 import { useUser } from "@/hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Eye, EyeOff, Loader2 } from "lucide-react";
+import { requestPasswordReset } from "@/lib/supabase-client";
 
 // Schema definitions remain unchanged
 const loginSchema = z.object({
@@ -123,10 +124,33 @@ export default function AuthPage() {
   };
 
   const onReset = async (data: { email: string }) => {
-    toast({
-      title: "Not implemented",
-      description: "Password reset functionality will be added soon.",
-    });
+    try {
+      setIsLoading(true);
+      const { error} = await requestPasswordReset(data.email);
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Password reset link sent to your email.",
+          variant: "default",
+        });
+        // Optionally redirect to login or show a different message
+        setMode("login");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send password reset link. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

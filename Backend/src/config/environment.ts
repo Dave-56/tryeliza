@@ -19,6 +19,8 @@ export const ENV = {
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY as string,
   SUPABASE_DB_URL: process.env.SUPABASE_DB_URL as string,
 
+  // Add Frontend URL
+  FRONTEND_URL: process.env.FRONTEND_URL as string,
   
   // Server
   PORT: parseInt(process.env.PORT || '3000', 10),
