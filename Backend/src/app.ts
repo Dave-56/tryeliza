@@ -73,9 +73,6 @@ async function initializeApp() {
     app.options('*', cors(corsOptions));
     app.use(bodyParser.json());
     app.use(express.json());
-
-    // Serve static files from the React app
-    app.use(express.static(path.join(__dirname, '../../Client/dist')));
     
     // Basic error handler
     app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -90,10 +87,10 @@ async function initializeApp() {
     app.get('/', (req: Request, res: Response) => {
       res.send('Server is running!');
     });
-    
-    // Serve React app
-    app.get('*', (req: Request, res: Response) => {
-      res.sendFile(path.join(__dirname, '../../Client/dist/index.html'));
+
+    // Add this to your app.ts file
+    app.get('/health', (req: Request, res: Response) => {
+      res.status(200).json({ status: 'ok' });
     });
     
  
@@ -109,6 +106,18 @@ async function initializeApp() {
     app.use('/api/analytics', analyticsRoutes);
     app.use('/api/waiting-tasks', waitingTaskRoutes);
     app.use('/api/follow-up-emails', followUpEmailRoutes);
+
+    // For production, conditionally serve static files
+    // Serve React app
+    if(process.env.NODE_ENV !== 'production') {
+      // Serve static files from the React app
+      app.use(express.static(path.join(__dirname, '../../Client/dist')));
+      
+      // Catch-all route for the React app (only in development)
+      app.get('*', (req: Request, res: Response) => {
+        res.sendFile(path.join(__dirname, '../../Client/dist/index.html'));
+      });
+    }
     
     // 404 handler
     app.use((req: Request, res: Response) => {
@@ -137,10 +146,6 @@ async function initializeApp() {
         console.error('Error in initial Gmail webhook renewal:', error);
       });
 
-      // Add this to your app.ts file
-      app.get('/api/health', (req: Request, res: Response) => {
-        res.status(200).json({ status: 'ok' });
-      });
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
