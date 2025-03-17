@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --ignore \"node_modules/**/*\" src/app.ts",
     "start": "tsx src/app.ts",
-    "build": "tsc",
+    "build": "tsc --skipLibCheck",
     "start:prod": "node dist/app.js",
     "create-db": "tsx src/scripts/create-database.ts",
     "push": "drizzle-kit push",
