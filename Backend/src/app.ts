@@ -88,8 +88,12 @@ async function initializeApp() {
       res.send('Server is running!');
     });
 
-    // Add this to your app.ts file
     app.get('/health', (req: Request, res: Response) => {
+      res.status(200).json({ status: 'ok' });
+    });
+
+    // Add back the /api/health endpoint for Railway
+    app.get('/api/health', (req: Request, res: Response) => {
       res.status(200).json({ status: 'ok' });
     });
     
