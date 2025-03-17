@@ -1,6 +1,0 @@
-echo ".env*
-node_modules
-dist
-build
-logs
-.DS_Store" > .gitignore
