@@ -1,0 +1,24 @@
+{
+    "name": "eliza-ai",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+      "Client",
+      "Backend"
+    ],
+    "scripts": {
+      "install:client": "cd Client && npm install",
+      "install:backend": "cd Backend && npm install",
+      "build:client": "cd Client && npm run build",
+      "build:backend": "cd Backend && npm run build",
+      "start": "cd Backend && npm start",
+      "dev": "concurrently \"cd Client && npm run dev\" \"cd Backend && npm run dev\"",
+      "postinstall": "npm run install:client && npm run install:backend && npm run build:client && npm run build:backend"
+    },
+    "devDependencies": {
+      "concurrently": "^8.0.0"
+    },
+    "engines": {
+      "node": ">=18.0.0"
+    }
+  }

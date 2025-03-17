@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import dotenv from 'dotenv';
+import path from 'path';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import bodyParser from 'body-parser';   
 import cors from 'cors';
@@ -72,6 +73,9 @@ async function initializeApp() {
     app.options('*', cors(corsOptions));
     app.use(bodyParser.json());
     app.use(express.json());
+
+    // Serve static files from the React app
+    app.use(express.static(path.join(__dirname, '../../Client/dist')));
     
     // Basic error handler
     app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -85,6 +89,11 @@ async function initializeApp() {
     // Root route
     app.get('/', (req: Request, res: Response) => {
       res.send('Server is running!');
+    });
+    
+    // Serve React app
+    app.get('*', (req: Request, res: Response) => {
+      res.sendFile(path.join(__dirname, '../../Client/dist/index.html'));
     });
     
  
@@ -126,6 +135,11 @@ async function initializeApp() {
       // Initial webhook renewal on startup
       setupWatchRenewal().catch(error => {
         console.error('Error in initial Gmail webhook renewal:', error);
+      });
+
+      // Add this to your app.ts file
+      app.get('/api/health', (req: Request, res: Response) => {
+        res.status(200).json({ status: 'ok' });
       });
     });
   } catch (error) {
