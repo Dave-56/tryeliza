@@ -25,23 +25,15 @@ import { checkWaitingTasks, initializeWaitingTaskScheduler } from './services/Sc
 
 dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development' });
 
-// In app.ts, add this before your existing dotenv config
-// Check if we're running in Railway
-if (process.env.RAILWAY_ENVIRONMENT) {
-  console.log('Running in Railway environment, using Railway environment variables');
-}
-
-// Add this near the start of your app.ts
-try {
-  dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development' });
-} catch (error) {
-  console.log('Error loading .env file, continuing with process.env:', error);
-}
-
-// Add debug logs
+console.log('Starting application...');
 console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('Environment variables loaded:', Object.keys(process.env));
+// Load environment variables from file
+require('dotenv').config({ 
+  path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development' 
+});
+
 console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
+
 
 // Initialize and start the scheduler
 const schedulerService = new SchedulerService();
