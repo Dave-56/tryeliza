@@ -6,14 +6,18 @@ export class OpenAIProvider implements LLMProvider {
     private model: string;
 
     constructor() {
-        if (!process.env.OPENAI_API_KEY) {
+        // Try different possible environment variable names
+        const apiKey = process.env.OPENAI_API_KEY || 
+        process.env.RAILWAY_OPENAI_API_KEY || 
+        process.env.RAILWAY_SERVICE_OPENAI_API_KEY;
+        if (!apiKey) {
             console.error('WARNING: OpenAI API key not configured in environment variables');
             console.error('Available environment variables:', Object.keys(process.env));
             throw new Error('OpenAI API key not configured');
         }
 
         this.client = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY,
+            apiKey: apiKey,
         });
 
         // You can change this to any OpenAI model like 'gpt-4-turbo-preview' or 'gpt-3.5-turbo'
