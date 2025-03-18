@@ -18,7 +18,13 @@ async function main() {
   }
 
   const sql = postgres(connectionString, {
-    ssl: ENV.SUPABASE_DB_URL ? { rejectUnauthorized: false } : false, // Accept self-signed certificates
+    ssl: ENV.SUPABASE_DB_URL ? { rejectUnauthorized: true } : false, // Properly validate certificates
+    connect_timeout: 10, // Add timeout to prevent hanging connections
+    idle_timeout: 20, // Close idle connections after 20 seconds
+    max: 10, // Maximum number of connections
+    connection: {
+      application_name: 'eliza-backend' // Helps identify your app in database logs
+    }
   });
 
   const db = drizzle(sql, { schema });
