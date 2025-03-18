@@ -3,7 +3,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy package files and install dependencies
-COPY package*.json ./
+COPY Backend/package*.json ./
 RUN npm install --ignore-scripts
 
 # Copy all files
