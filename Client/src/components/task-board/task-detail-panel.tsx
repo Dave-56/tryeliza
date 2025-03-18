@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Command, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
@@ -59,7 +58,7 @@ export const TaskDetailPanel: FC<TaskDetailPanelProps> = ({ task, onClose }) => 
   useEffect(() => {
     if (task) {
       setEditedTitle(task.title);
-      setSelectedColumn(task.status || '');
+      setSelectedColumn(task.status?.toLowerCase() || "inbox");
       setEditedPriority(task.priority || '');
 
       // console.log("Task detail panel useEffect triggered with task:", task);
@@ -383,7 +382,7 @@ export const TaskDetailPanel: FC<TaskDetailPanelProps> = ({ task, onClose }) => 
       { 
         id: taskId as number, 
         status: formattedStatus, // Capitalize first letter
-        column_id: columnId // Add column_id to the update
+        column_id: columnId || undefined // Convert null to undefined
       },
       {
         onSuccess: () => {

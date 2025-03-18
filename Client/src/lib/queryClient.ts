@@ -1,5 +1,4 @@
 import { QueryClient } from "@tanstack/react-query";
-import { apiClient } from "./api-client";
 import { supabase } from "./supabase-client";
 
 // Custom fetch function that handles token refresh

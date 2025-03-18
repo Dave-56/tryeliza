@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Task, TaskAction, WaitingTask } from '../../../Backend/src/db/schema';
+import { Task, TaskAction, WaitingTask } from '../types/model';
 import { apiClient } from '../lib/api-client';
 
 // Task hooks

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { TaskNote } from '../../../Backend/src/db/schema';
+import { TaskNote } from '../types/model';
 import { apiClient } from '../lib/api-client';
 
 // Task Notes hooks

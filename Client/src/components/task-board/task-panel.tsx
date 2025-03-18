@@ -10,8 +10,7 @@ import { useColumnsWithTasks, DbColumnWithTasks, DbTask } from '@/hooks/use-colu
 import { useTaskMutations } from '@/hooks/use-tasks';
 import { useTaskActionMutations } from '@/hooks/use-task-actions';
 import { useQueryClient } from '@tanstack/react-query';
-import { Task, TaskAction, DbTaskExtended } from '@/types/task';
-import { EmailMessage } from '@/types/email';
+import { Task, DbTaskExtended } from '@/types/task';
 
 
 interface DbColumnExtended {

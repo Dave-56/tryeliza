@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LoginCredentials, SignupCredentials, User } from '../../../Backend/src/Types/model';
-import { apiClient } from '../lib/api-client';
+import { LoginCredentials, SignupCredentials, User } from '../types/model';
 import { useLocation } from 'wouter';
 import { getUser, signIn, signOut, signUp, supabase } from '../lib/supabase-client';
 import { useToast } from './use-toast';
@@ -28,7 +27,7 @@ export function useUser() {
       // Fetch the user's data from the users table
       const { data: userData, error } = await supabase
         .from('users')
-        .select('name, email, contextual_drafting_enabled, action_item_conversion_enabled')
+        .select('name, email, contextual_drafting_enabled, action_item_conversion_enabled, timezone, is_active, created_at')
         .eq('id', supabaseUser.id)
         .single();
       
@@ -44,6 +43,9 @@ export function useUser() {
         name: userData?.name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || '',
         contextual_drafting_enabled: userData?.contextual_drafting_enabled || supabaseUser.user_metadata?.contextual_drafting_enabled || false,
         action_item_conversion_enabled: userData?.action_item_conversion_enabled || supabaseUser.user_metadata?.action_item_conversion_enabled || false,
+        timezone: userData?.timezone || 'UTC',
+        is_active: userData?.is_active !== undefined ? userData.is_active : true,
+        created_at: userData?.created_at || new Date().toISOString(),
       };
     },
     staleTime: 1000 * 60 * 5, // 5 minutes,

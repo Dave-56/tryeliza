@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '../lib/api-client';
-import type { Email, Task } from '../../../Backend/src/db/schema';
-import { EmailProvider, Integration } from '../../../Backend/src/Types/model';
+import type { Email, Task } from '../types/model';
+import { EmailProvider, Integration } from '../types/model';
 import { EmailMessage, ThreadSummary, EmailThreadResponse } from '../types/email';
+
 
 export function useEmails() {
   return useQuery<Email[]>({

@@ -1,9 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase-client'; // Your Supabase client
-import { useUser } from '@/hooks/use-user';
 import { apiClient } from '@/lib/api-client';
-import type { FollowUpEmail } from '../../../Backend/src/db/schema';
+import type { FollowUpEmail } from '../types/model';
 
 // Type for creating a new follow-up email
 interface CreateFollowUpEmailParams {

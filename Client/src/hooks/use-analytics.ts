@@ -1,7 +1,6 @@
 // src/hooks/use-analytics.ts
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
-import { useUser } from './use-user';
 
 export interface UserAnalytics {
   emailsProcessed: number;

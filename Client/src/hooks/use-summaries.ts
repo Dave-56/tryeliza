@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
-import { BackendResponse } from '../../../Backend/src/Types/model';
+import { BackendResponse } from '../types/model';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { enUS, enGB, enAU, enCA, enNZ } from 'date-fns/locale';
@@ -8,8 +8,7 @@ import { format, parseISO } from 'date-fns';
 import { 
   DailySummaryResponse, 
   EmailDigestResponse, 
-  CategorySummary,
-  EmailSummary 
+  CategorySummary
 } from '../types/email-digest';
 
 // Helper function to determine the appropriate locale

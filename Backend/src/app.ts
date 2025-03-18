@@ -37,7 +37,8 @@ const PORT: number = parseInt(process.env.PORT || '5001', 10);
 
 // CORS configuration
 const allowedOrigins: string[] = [
-    process.env.FRONTEND_URL!
+    process.env.FRONTEND_URL!,
+    'http://localhost:3001'
 ];
 
 const corsOptions = {

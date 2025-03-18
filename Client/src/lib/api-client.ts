@@ -1,9 +1,9 @@
-import { BackendResponse, User, Integration } from '../../../Backend/src/Types/model';
+import { BackendResponse, User, Integration } from '../types/model';
 import { supabase } from './supabase-client';
 
 class ApiClient {
   private static instance: ApiClient;
-  private baseUrl: string = ''; // Empty string for relative URLs or set to your API base URL
+  private baseUrl: string = import.meta.env.VITE_BACKEND_URL || ''; // Use environment variable
 
   private constructor() {
     // No need to initialize tokens from localStorage anymore
