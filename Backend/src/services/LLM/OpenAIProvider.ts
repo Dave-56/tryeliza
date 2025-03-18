@@ -7,6 +7,8 @@ export class OpenAIProvider implements LLMProvider {
 
     constructor() {
         if (!process.env.OPENAI_API_KEY) {
+            console.error('WARNING: OpenAI API key not configured in environment variables');
+            console.error('Available environment variables:', Object.keys(process.env));
             throw new Error('OpenAI API key not configured');
         }
 
