@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { apiClient } from "./api-client";
+import { supabase } from "./supabase-client";
 
 // Custom fetch function that handles token refresh
 const customFetch = async (url: string, options: RequestInit = {}) => {
@@ -9,16 +10,16 @@ const customFetch = async (url: string, options: RequestInit = {}) => {
     // If the response is 401 Unauthorized, try to refresh the token
     if (res.status === 401) {
       try {
-        // Try to refresh the token
-        const refreshResponse = await apiClient.refreshAuthToken();
+        // Try to refresh the session with Supabase
+        const { data, error } = await supabase.auth.refreshSession();
         
-        if (refreshResponse.data) {
+        if (data.session && !error) {
           // If token was refreshed successfully, retry the original request with the new token
           const newOptions = { ...options };
-          if (newOptions.headers && apiClient.getAccessToken()) {
+          if (newOptions.headers) {
             newOptions.headers = {
               ...newOptions.headers,
-              'Authorization': apiClient.getAccessToken()!
+              'Authorization': `Bearer ${data.session.access_token}`
             };
           }
           

@@ -13,7 +13,7 @@
       "build:backend": "cd Backend && npm run build",
       "start": "cd Backend && npm run start:prod",
       "dev": "concurrently \"cd Client && npm run dev\" \"cd Backend && npm run dev\"",
-      "postinstall": "cd Client && npm install && npm run build && cd ../Backend && npm install && npm run build"
+      "_postinstall": "cd Client && npm install && npm run build && cd ../Backend && npm install && npm run build"
     },
     "devDependencies": {
       "concurrently": "^8.0.0"
