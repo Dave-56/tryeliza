@@ -25,16 +25,6 @@ import { checkWaitingTasks, initializeWaitingTaskScheduler } from './services/Sc
 
 dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development' });
 
-console.log('Starting application...');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-// Load environment variables from file
-require('dotenv').config({ 
-  path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development' 
-});
-
-console.log('OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY);
-
-
 // Initialize and start the scheduler
 const schedulerService = new SchedulerService();
 schedulerService.startScheduledJobs();

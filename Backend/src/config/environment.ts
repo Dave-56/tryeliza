@@ -11,7 +11,7 @@ export const isProduction = process.env.NODE_ENV === 'production';
 // Define and export required environment variables with types
 export const ENV = {
   // Database
-  DATABASE_URL: process.env.DATABASE_URL as string,
+  DATABASE_URL: process.env.DATABASE_URL || process.env.SUPABASE_DB_URL as string,
 
   // Add Supabase variables
   SUPABASE_URL: process.env.SUPABASE_URL as string,

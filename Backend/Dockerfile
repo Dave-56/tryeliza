@@ -16,5 +16,4 @@ EXPOSE 5001
 ENV NODE_ENV=production
 
 # Start the application with tsx (TypeScript executor)
-# Using shell form to ensure environment variables are properly expanded
-CMD npx tsx src/app.ts
+CMD ["npx", "tsx", "src/app.ts"]
