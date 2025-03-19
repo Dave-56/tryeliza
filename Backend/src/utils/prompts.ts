@@ -368,10 +368,11 @@ Required Output:
                     "messageId": "Extract the exact Message ID from the email. If the email does not include a valid Message ID, do not include that email's summary in the final JSON output.",
                     "insights": {
                         "key_highlights": [
-                            "1-2 key data-driven points from the email",
-                            "Another important highlight if relevant"
+                            "Q1 Marketing Budget: Increased by 25% to $250K, with focus on digital campaigns (45% allocation)",
+                            "Team Expansion: 3 new design roles approved, interviews starting next week",
+                            "Competitive Update: Main competitor launched AI feature at $29/month, 20% below our pricing"
                         ],
-                        "why_this_matters": "Explain the relevance to the user's business, finances, calendar events, or workflows as a single string. Make it personal by using 'you' and 'your' language. Connect the email content to potential impact or opportunities. If user tasks are provided AND the email clearly relates to those tasks, explain the connection. Don't force a connection to tasks if none exists - this could mislead the user. For emails unrelated to specific tasks, focus on broader relevance to the user's work or interests. For task-related emails, explain how the email might affect task priority or timeline.",
+                        "why_this_matters": "Explain the relevance to the user's business, finances, calendar events, or workflows as a single string. Make it personal by using 'you' and 'your' language. Connect the email content to potential impact or opportunities. If user tasks are provided AND the email clearly relates to those tasks, explain the connection. Don't force a connection to tasks if none exists - this could mislead the user. For emails unrelated to specific tasks, focus on broader relevance to the user's work or interests. For task-related emails, explain how the email might affect task priority or timeline. 
                         "next_step": [
                             "Reply to the Q3 budget proposal with your department's feedback by this Friday (March 19)",
                             "Schedule the project kickoff meeting with marketing and design teams before end of month",
@@ -456,6 +457,68 @@ When creating summaries and insights, always consider the diverse audience of sm
    - Consider how information affects work-life balance and personal productivity
 
 Every summary should answer: 'How can this information help me work more effectively, advance professionally, save time, increase revenue, or reduce costs?'
+
+--- KEY HIGHLIGHTS AND NEXT STEPS GUIDELINES ---
+
+The key_highlights section should provide a comprehensive analysis of the email content, making Gmail redundant for our users:
+
+1. Essential Information Extraction:
+   - Extract specific numbers, metrics, and data points (e.g., "Q4 revenue increased by 23% to $1.2M")
+   - Identify concrete deadlines and important dates (e.g., "Project deadline moved to April 15")
+   - Capture key decisions or changes (e.g., "Team restructuring: 3 new roles added to Design department")
+
+2. Content Analysis:
+   - For newsletters/articles:
+     * Summarize main topics and key findings
+     * Extract specific statistics and research data
+     * Note if content is behind a paywall
+     * Highlight industry-specific insights
+   - For business communications:
+     * Document specific requests or requirements
+     * Note changes to existing processes or policies
+     * Highlight resource allocations or budget changes
+
+3. Context and Relationships:
+   - Connect information to ongoing projects or previous communications
+   - Identify stakeholders and their roles
+   - Note dependencies or blockers
+   - Highlight changes from previous versions or meetings
+
+4. Format Guidelines:
+   - Use bullet points that are complete, informative sentences
+   - Include 2-4 highlights per email
+   - Order by importance (most critical first)
+   - For paywalled content, note: "Full article requires subscription - key visible points summarized"
+
+5. Special Attention Areas:
+   - Financial Implications: Note specific costs, savings, or revenue impacts
+   - Time-Sensitive Information: Highlight expiration dates or deadlines
+   - Resource Requirements: Specify team, budget, or tool needs
+   - Competitive Intelligence: Note market changes or competitor actions
+
+--- NEXT STEPS GUIDELINES ---
+
+When creating next steps:
+1. Deadline Format:
+   - Always include a specific deadline or timeframe
+   - Use clear date formats (e.g., 'by Friday, March 22' or 'within 48 hours')
+   - For recurring tasks, specify frequency (e.g., 'every Monday at 10 AM')
+
+2. Action Items:
+   - Start each step with a strong action verb (Schedule, Review, Submit, Update)
+   - Make steps specific and measurable
+   - Include quantifiable impact where possible (e.g., 'to save $50/month', 'to increase efficiency by 25%')
+
+3. Link Format:
+   - For actionable links, use the format: "descriptive text||url"
+   - Make the descriptive text clear and action-oriented
+   - Example: "Update your subscription settings to save $50/month||https://example.com/settings"
+
+4. Paywall Handling:
+   - For paywalled content, provide a clear next step with subscription details
+   - Include pricing if visible (e.g., "Subscribe to access full report - $29/month||https://example.com/subscribe")
+   - For business-critical content, suggest alternative free sources if available
+   - Format: "Access [specific value proposition] with a subscription||[subscription url]"
 
 --- CATEGORY GUIDELINES ---
 

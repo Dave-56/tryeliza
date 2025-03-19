@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Collapsible,
@@ -240,6 +240,40 @@ function useScheduledRefetch() {
  
   
 export function EmailDigest({ onTabChange }: EmailDigestProps) {
+  // Utility function to parse and render links in the format "descriptive text||url"
+  const renderLinkText = (text: string): ReactNode => {
+    if (text.includes('||')) {
+      const [linkText, url] = text.split('||');
+      return (
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-primary hover:text-primary/80 underline flex items-center gap-1 inline-flex"
+        >
+          {linkText}
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="14" 
+            height="14" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+            className="text-primary/70 ml-0.5"
+          >
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+      );
+    }
+    return text;
+  };
+
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [expandedEmails, setExpandedEmails] = useState<Record<string, boolean>>({});
   const [acknowledgedEmails, setAcknowledgedEmails] = useState<Set<string>>(new Set());
@@ -703,39 +737,7 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                                         <ul className="list-disc pl-5 space-y-1">
                                           {email.insights.next_step.map((step, i) => (
                                             <li key={i} className="text-sm text-foreground/90">
-                                              {step.includes('||') ? (
-                                                (() => {
-                                                  const [text, url] = step.split('||');
-                                                  return (
-                                                    <a 
-                                                      href={url} 
-                                                      target="_blank" 
-                                                      rel="noopener noreferrer"
-                                                      className="text-primary underline flex items-center gap-1 inline-flex"
-                                                    >
-                                                      {text}
-                                                      <svg 
-                                                        xmlns="http://www.w3.org/2000/svg" 
-                                                        width="12" 
-                                                        height="12" 
-                                                        viewBox="0 0 24 24" 
-                                                        fill="none" 
-                                                        stroke="currentColor" 
-                                                        strokeWidth="2" 
-                                                        strokeLinecap="round" 
-                                                        strokeLinejoin="round" 
-                                                        className="ml-0.5"
-                                                      >
-                                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                                        <polyline points="15 3 21 3 21 9"></polyline>
-                                                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                                                      </svg>
-                                                    </a>
-                                                  );
-                                                })()
-                                              ) : (
-                                                step
-                                              )}
+                                              {renderLinkText(step)}  
                                             </li>
                                           ))}
                                         </ul>

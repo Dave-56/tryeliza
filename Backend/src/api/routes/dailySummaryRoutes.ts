@@ -38,6 +38,7 @@ function formatDate(date: any): string {
   }
 }
 
+
 // Define interface for daily summary response
 interface DailySummaryResponse {
   userId: string;
