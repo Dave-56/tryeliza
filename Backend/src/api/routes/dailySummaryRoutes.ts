@@ -79,7 +79,7 @@ router.get('/', auth, async (
 ) => {
   try {
     console.log('[ENV CHECK] Supabase URL:', process.env.SUPABASE_URL?.substring(0, 15) + '...');
-    console.log('[ENV CHECK] Supabase Key exists:', !!process.env.SUPABASE_KEY);
+    console.log('[ENV CHECK] Supabase Key exists:', !!process.env.SUPABASE_ANON_KEY);
 
     const userId = req.user.id;
     if (!userId) {
@@ -133,7 +133,7 @@ router.get('/', auth, async (
     console.log('[DEBUG] Calling repository.findByDateAndUser with params:', { userId, formattedDate, period });
     const summary = await dailySummaryRepository.findByDateAndUser(userId, formattedDate, period);
     console.log('[DEBUG] Repository returned summary:', summary ? 'Found' : 'Not found');
-    
+
     if (summary && summary.categories_summary) {
       console.log('[DEBUG] Summary has categories:', summary.categories_summary.length);
       if (summary.categories_summary[0] && summary.categories_summary[0].items) {
