@@ -78,6 +78,9 @@ router.get('/', auth, async (
   res: Response<BackendResponse<DailySummaryResponse>>
 ) => {
   try {
+    console.log('[ENV CHECK] Supabase URL:', process.env.SUPABASE_URL?.substring(0, 15) + '...');
+    console.log('[ENV CHECK] Supabase Key exists:', !!process.env.SUPABASE_KEY);
+
     const userId = req.user.id;
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required', isSuccess: false });
@@ -86,18 +89,20 @@ router.get('/', auth, async (
     // Parse and validate query parameters
     
     const dateStr = req.query.date as string | undefined;
-    console.log(dateStr)
+    console.log('[DEBUG] Raw date string from request:', dateStr);
     const period = (req.query.period as string) || 'morning';
     
     // Get the user's timezone from the database or request, or default to system timezone
     const userTimezone = req.user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    
+    console.log('[DEBUG] User timezone:', userTimezone);
+
     // Create a date object
     let date: Date;
     
     if (dateStr) {
       // If date string is provided, parse it
       date = new Date(dateStr);
+      console.log('[DEBUG] Parsed date from string:', date);
       
       if (isNaN(date.getTime())) {
         return res.status(400).json({ 
@@ -108,6 +113,8 @@ router.get('/', auth, async (
     } else {
       // Default to today in the user's timezone
       date = new Date(new Date().toLocaleString('en-US', { timeZone: userTimezone }));
+      console.log('[DEBUG] Using default date (today):', date);
+
     }
     
     // Format the date as YYYY-MM-DD in the user's timezone for database query
@@ -117,16 +124,24 @@ router.get('/', auth, async (
       day: '2-digit',
       timeZone: userTimezone
     }).format(date).replace(/\//g, '-'); // Replace / with - to ensure YYYY-MM-DD format
+    console.log(`[DEBUG] Formatted date for query: ${formattedDate}, period: ${period}, userId: ${userId}`);
     
     console.log(`API: Querying for date ${formattedDate} and period ${period} based on user timezone ${userTimezone}`);
     
     // Pass the formatted date string directly to the repository instead of the Date object
     // This ensures we're using the exact same date format in both the API and repository
+    console.log('[DEBUG] Calling repository.findByDateAndUser with params:', { userId, formattedDate, period });
     const summary = await dailySummaryRepository.findByDateAndUser(userId, formattedDate, period);
-    if (summary && summary.categories_summary && summary.categories_summary[0] && summary.categories_summary[0].items && summary.categories_summary[0].items[0]) {
-      console.log(summary.categories_summary[0].items[0].priority_score)
+    console.log('[DEBUG] Repository returned summary:', summary ? 'Found' : 'Not found');
+    
+    if (summary && summary.categories_summary) {
+      console.log('[DEBUG] Summary has categories:', summary.categories_summary.length);
+      if (summary.categories_summary[0] && summary.categories_summary[0].items) {
+        console.log('[DEBUG] First category has items:', summary.categories_summary[0].items.length);
+      }
     }
     if (!summary) {
+      console.log('[DEBUG] No summary found, returning empty response');
       // Return a valid response structure with empty categories instead of an error
       // This allows the frontend to handle the case where no summary exists yet
       return res.json({

@@ -18,6 +18,7 @@ import { useTaskNotes, useTaskNoteMutations, FormattedTaskNote } from "@/hooks/u
 import { useUser } from "@/hooks/use-user";
 import { useQueryClient } from '@tanstack/react-query';
 import { useColumns, useColumnsWithTasks } from "@/hooks/use-column";
+import { normalizePriority } from "@/lib/utils";
 
 
 interface TaskDetailPanelProps {
@@ -36,7 +37,7 @@ export const TaskDetailPanel: FC<TaskDetailPanelProps> = ({ task, onClose }) => 
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task?.title || '');
   const [editedDueDate, setEditedDueDate] = useState<Date | null>(null);
-  const [editedPriority, setEditedPriority] = useState<'High' | 'Medium' | 'Low' | ''>(task?.priority || '');
+  const [editedPriority, setEditedPriority] = useState<'High' | 'Medium' | 'Low' | 'Urgent' | ''>(normalizePriority(task?.priority) || '');
   const [openPriorityDropdown, setOpenPriorityDropdown] = useState(false);
   const [openCalendar, setOpenCalendar] = useState(false);
   const [emailTab, setEmailTab] = useState<'original' | 'latest'>('original');
@@ -60,7 +61,7 @@ export const TaskDetailPanel: FC<TaskDetailPanelProps> = ({ task, onClose }) => 
       setEditedTitle(task.title);
       setSelectedColumn(task.status?.toLowerCase() || "inbox");
       setEditedPriority(task.priority || '');
-
+      
       // console.log("Task detail panel useEffect triggered with task:", task);
       // console.log("Task has thread_id:", !!task.thread_id);
       // console.log("Task has emailContent:", !!task.emailContent);
@@ -784,12 +785,12 @@ export const TaskDetailPanel: FC<TaskDetailPanelProps> = ({ task, onClose }) => 
                     <Command>
                       <CommandEmpty>No priority found.</CommandEmpty>
                       <CommandGroup>
-                        {['High', 'Medium', 'Low'].map((priority) => (
+                        {['High', 'Medium', 'Low', 'Urgent'].map((priority) => (
                           <CommandItem
                             key={priority}
                             value={priority}
                             onSelect={(currentValue) => {
-                              setEditedPriority(currentValue as 'High' | 'Medium' | 'Low');
+                              setEditedPriority(currentValue as 'High' | 'Medium' | 'Low' | 'Urgent');
                               setOpenPriorityDropdown(false);
                             }}
                           >
@@ -810,12 +811,12 @@ export const TaskDetailPanel: FC<TaskDetailPanelProps> = ({ task, onClose }) => 
                 <Badge
                   variant="outline"
                   className={cn(
-                    task.priority === 'High' && "text-red-500 border-red-200",
-                    task.priority === 'Medium' && "text-green-500 border-green-200",
-                    task.priority === 'Low' && "text-slate-500 border-slate-200"
+                    normalizePriority(task.priority) === 'High' || normalizePriority(task.priority) === 'Urgent' && "text-red-500 border-red-200",
+                    normalizePriority(task.priority) === 'Medium' && "text-green-500 border-green-200",
+                    normalizePriority(task.priority) === 'Low' && "text-slate-500 border-slate-200"
                   )}
                 >
-                  {task.priority}
+                  {normalizePriority(task.priority)}
                 </Badge>
               )}
             </div>

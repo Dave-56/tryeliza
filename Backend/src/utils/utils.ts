@@ -1,4 +1,3 @@
-import { jsonrepair } from 'jsonrepair';
 import { simpleParser } from 'mailparser';
 import sanitizeHtml from 'sanitize-html';
 import * as cheerio from 'cheerio';
@@ -6,6 +5,11 @@ import TurndownService from 'turndown';
 import EmailReplyParser from 'email-reply-parser';
 import ThreadDebugLogger from './ThreadDebugLogger';
 import { SummarizationResponse } from '../Types/model';
+
+let jsonrepairModule: any;
+(async () => {
+  jsonrepairModule = await import('jsonrepair');
+})();
 
 interface EmailPayload {
     headers: { name: string; value: string }[];
@@ -247,7 +251,7 @@ export const extractEmailInfoFromMessage = (message: EmailMessage, thread?: Emai
             if (!msg) return; // Skip null/undefined messages
             
             // Ensure headers exist
-            const msgHeaders = msg.headers || {};
+            const msgHeaders = (msg.headers || {}) as { from?: string; subject?: string; date?: string };
             
             const messageSender = msgHeaders.from || '';
             const messageSubject = msgHeaders.subject || '';

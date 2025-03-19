@@ -22,7 +22,7 @@ export interface Task {
   message: string;
   waitingTime?: string;
   actions?: TaskAction[];
-  priority?: 'High' | 'Medium' | 'Low';
+  priority?: 'High' | 'Medium' | 'Low' | 'Urgent';
   status?: string;
   description?: string;
   aiSummary?: string;

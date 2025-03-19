@@ -6,6 +6,7 @@ import { Task } from '@/types/task';
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { normalizePriority } from "@/lib/utils";
 
 export const TaskCard: FC<{ 
   task: Task; 
@@ -87,13 +88,13 @@ export const TaskCard: FC<{
         <div className="flex flex-wrap gap-2 mb-2">
           {task.priority && (
             <Badge 
-              variant={task.priority === 'High' ? 'destructive' : 'outline'}
+              variant={normalizePriority(task.priority) === 'High' || normalizePriority(task.priority) === 'Urgent' ? 'destructive' : 'outline'}
               className={`text-[10px] px-1 h-4 ${
-                task.priority === 'Medium' ? 'text-green-600' : 
-                task.priority === 'Low' ? 'text-slate-500' : ''
+                normalizePriority(task.priority) === 'Medium' ? 'text-green-600' : 
+                normalizePriority(task.priority) === 'Low' ? 'text-slate-500' : ''
               }`}
             >
-              {task.priority}
+              {normalizePriority(task.priority)}
             </Badge>
           )}
           {task.waitingTime && (
