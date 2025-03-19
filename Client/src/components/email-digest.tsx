@@ -280,8 +280,11 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   
   const initializeTimeOfDay = () => {
-    const currentHour = new Date().getHours();
-    return currentHour >= 0 && currentHour < 16 ? 'morning' : 'evening';
+    // Get user's timezone
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // Get current hour in user's timezone
+    const currentHour = new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: userTimezone });
+    return parseInt(currentHour) < 16 ? 'morning' : 'evening';
   }
 
   const [timeOfDay, setTimeOfDay] = useState<"morning" | "evening">(initializeTimeOfDay());

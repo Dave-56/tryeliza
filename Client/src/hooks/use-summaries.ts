@@ -90,11 +90,13 @@ export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?:
       return response;
     },
     select: transformDailySummaryToDigest,
-    staleTime: 0, // Always consider data stale immediately
-    refetchInterval: false, // Don't automatically refetch
-    retry: 2,
+    staleTime: 1000 * 60 * 5, // Data stays fresh for 5 minutes
+    refetchInterval: false,
+    retry: 3, // More retries for better reliability
     enabled: Boolean(apiClient.isAuthenticated()),
-    refetchOnWindowFocus: false
+    refetchOnMount: true, // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnReconnect: true // Refetch on network reconnection
   });
 }
 
