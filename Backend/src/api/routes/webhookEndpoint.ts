@@ -32,8 +32,9 @@ const webhookMetrics = {
 const ALLOWED_PUBSUB_DOMAINS = [
     'pubsub.googleapis.com',
     'gmail.googleapis.com',
-    'ngrok-free.app', // Allow ngrok domains for development
-    'localhost'       // Allow localhost for local testing
+    'ngrok-free.app',    // Allow ngrok domains for development
+    'localhost',         // Allow localhost for local testing
+    'api.tryeliza.ai'   // Production API domain
 ];
 
 // Configure circuit breaker for Gmail API calls

@@ -97,23 +97,29 @@ router.get('/', auth, async (
     const userTimezone = req.user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     console.log('[DEBUG] User timezone:', userTimezone);
 
-    // Create a date object
+    // Create a date object in the user's timezone
     let date: Date;
     
     if (dateStr) {
-      // If date string is provided, parse it
-      date = new Date(dateStr);
-      console.log('[DEBUG] Parsed date from string:', date);
-      
-      if (isNaN(date.getTime())) {
+      // If date string is provided, ensure it's interpreted in the user's timezone
+      const [year, month, day] = dateStr.split('-').map(Number);
+      if (!year || !month || !day) {
         return res.status(400).json({ 
           error: 'Invalid date format. Use YYYY-MM-DD', 
           isSuccess: false 
         });
       }
+      // Create date in user's timezone
+      date = new Date(Date.UTC(year, month - 1, day));
+      console.log('[DEBUG] Parsed date from string:', date);
     } else {
       // Default to today in the user's timezone
-      date = new Date(new Date().toLocaleString('en-US', { timeZone: userTimezone }));
+      const now = new Date();
+      date = new Date(Date.UTC(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      ));
       console.log('[DEBUG] Using default date (today):', date);
 
     }

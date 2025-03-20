@@ -25,19 +25,43 @@ export class DailySummaryRepository extends BaseRepository<DailySummary, InsertD
       // If it's already a formatted string, use it directly
       formattedDate = summaryDate;
     } else {
-      // If it's a Date object, format it
-      formattedDate = summaryDate.toISOString().split('T')[0];
+      // If it's a Date object, format it using the local timezone
+      formattedDate = new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(summaryDate);
     }
     
-    console.log(`Repository: Querying for user ${userId}, date ${formattedDate}, period ${period}`);
+    console.log(`[DEBUG] Repository date handling:`, {
+      inputType: typeof summaryDate,
+      inputValue: typeof summaryDate === 'string' ? summaryDate : summaryDate.toISOString(),
+      formattedDate,
+      userId,
+      period
+    });
     
     const results = await this.executeQuery((db) => 
-      db.select()
+      db.select({
+        user_id: this.table.user_id,
+        summary_date: this.table.summary_date,
+        period: this.table.period,
+        timezone: this.table.timezone,
+        categories_summary: this.table.categories_summary,
+        status: this.table.status,
+        scheduled_time: this.table.scheduled_time,
+        last_run_at: this.table.last_run_at,
+        error_details: this.table.error_details,
+        email_count: this.table.email_count,
+        cache_duration_hours: this.table.cache_duration_hours,
+        created_at: this.table.created_at,
+        updated_at: this.table.updated_at
+      })
         .from(this.table)
         .where(
           and(
             eq(this.table.user_id, userId),
-            eq(sql`DATE(${this.table.summary_date})`, formattedDate),
+            eq(this.table.summary_date, formattedDate),
             eq(this.table.period, period)
           )
         )
