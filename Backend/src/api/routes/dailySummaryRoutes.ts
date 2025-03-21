@@ -4,6 +4,7 @@ import { dailySummaryRepository, emailRepository } from '../../repositories';
 import { BackendResponse } from '../../Types/model';
 import auth from '../middleware/auth.js';
 import { SchedulerService } from '../../services/Scheduler/SchedulerService.js';
+import { formatForDB, formatForAPI, isValidDateFormat, parseFromAPI, fromUTC, formatForEmailSummary } from '../../utils/dateUtils.js';
 
 const schedulerService = new SchedulerService();
 
@@ -102,35 +103,40 @@ router.get('/', auth, async (
     
     if (dateStr) {
       // If date string is provided, ensure it's interpreted in the user's timezone
-      const [year, month, day] = dateStr.split('-').map(Number);
-      if (!year || !month || !day) {
+      if (!isValidDateFormat(dateStr)) {
         return res.status(400).json({ 
           error: 'Invalid date format. Use YYYY-MM-DD', 
           isSuccess: false 
         });
       }
-      // Create date in user's timezone
+      // Parse the date string directly in user's timezone without UTC conversion
+      const [year, month, day] = dateStr.split('-').map(Number);
       date = new Date(Date.UTC(year, month - 1, day));
-      console.log('[DEBUG] Parsed date from string:', date);
+      console.log('[DEBUG] Input date string:', dateStr);
+      console.log('[DEBUG] Parsed UTC date:', date.toISOString());
     } else {
-      // Default to today in the user's timezone
-      const now = new Date();
-      date = new Date(Date.UTC(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      ));
-      console.log('[DEBUG] Using default date (today):', date);
-
+      // When no date provided, format current time directly in user's timezone
+      const formattedDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+      
+      // Parse the formatted date to create a UTC date object for other uses
+      const [year, month, day] = formattedDate.split('-').map(Number);
+      date = new Date(Date.UTC(year, month - 1, day));
+      console.log('[DEBUG] Using default date (today):', formattedDate);
     }
     
-    // Format the date as YYYY-MM-DD in the user's timezone for database query
-    const formattedDate = new Intl.DateTimeFormat('en-CA', { // en-CA uses YYYY-MM-DD format
+    // Use dateStr if provided, otherwise use the already formatted date from above
+    const formattedDate = dateStr || (new Intl.DateTimeFormat('en-CA', {
+      timeZone: userTimezone,
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit',
-      timeZone: userTimezone
-    }).format(date).replace(/\//g, '-'); // Replace / with - to ensure YYYY-MM-DD format
+      day: '2-digit'
+    }).format(new Date()));
+    
     console.log(`[DEBUG] Formatted date for query: ${formattedDate}, period: ${period}, userId: ${userId}`);
     
     console.log(`API: Querying for date ${formattedDate} and period ${period} based on user timezone ${userTimezone}`);
@@ -154,18 +160,18 @@ router.get('/', auth, async (
       return res.json({
         data: {
           userId: userId,
-          summaryDate: formatDate(date),
+          summaryDate: formatForAPI(date),
           period: period,
-          timezone: 'UTC',
+          timezone: userTimezone,
           categoriesSummary: [], // Empty array instead of undefined
           status: 'pending',
-          createdAt: formatDate(new Date()),
-          lastUpdated: formatDate(new Date()),
-          currentServerTime: formatDate(new Date()),
+          createdAt: formatForAPI(new Date()),
+          lastUpdated: formatForAPI(new Date()),
+          currentServerTime: formatForAPI(new Date()),
           isSuccess: true
         },
         isSuccess: true,
-        error: `No summary found for ${formatDate(date)}. You can generate one using the 'Generate New Summary' button.`
+        error: `No summary found for ${formatForEmailSummary(date, userTimezone)}. You can generate one using the 'Generate New Summary' button.`
       });
     }
 
@@ -213,7 +219,7 @@ router.get('/', auth, async (
       return res.json({
         data: {
           userId: summary.user_id,
-          summaryDate: formatDate(summary.summary_date),
+          summaryDate: formatForAPI(new Date(summary.summary_date)),
           period: summary.period,
           timezone: summary.timezone || 'UTC',
           categoriesSummary: sortEmailsByPriority(summary.categories_summary?.map(category => ({
@@ -232,9 +238,9 @@ router.get('/', auth, async (
             })) || []
           })) || []),
           status: summary.status,
-          createdAt: formatDate(summary.created_at),
-          lastUpdated: formatDate(lastUpdated),
-          currentServerTime: formatDate(currentTimestamp),
+          createdAt: formatForAPI(new Date(summary.created_at)),
+          lastUpdated: formatForAPI(new Date(lastUpdated)),
+          currentServerTime: formatForAPI(currentTimestamp),
           isSuccess: true
         },
         isSuccess: true,
@@ -264,9 +270,9 @@ router.get('/', auth, async (
           })) || []
         })) || []),
         status: summary.status,
-        createdAt: formatDate(summary.created_at),
-        lastUpdated: formatDate(lastUpdated),
-        currentServerTime: formatDate(currentTimestamp),
+        createdAt: formatForAPI(summary.created_at),
+        lastUpdated: formatForAPI(lastUpdated),
+        currentServerTime: formatForAPI(currentTimestamp),
         isSuccess: true
       },
       isSuccess: true

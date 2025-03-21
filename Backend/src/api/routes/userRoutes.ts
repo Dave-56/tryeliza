@@ -1,5 +1,18 @@
 // routes/userRoutes.ts
 import express, { Request, Response } from 'express';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase Admin client for user management
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key for admin operations
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
 import { userRepository, emailAccountRepository } from '../../repositories';
 import { BackendResponse, Integration, EmailProvider } from '../../Types/model';
 import { check, validationResult } from 'express-validator';
@@ -38,10 +51,11 @@ router.patch('/settings', auth, async (req: Request, res: Response) => {
       action_item_conversion_enabled, 
     } = req.body;
     
-    const updatedUser = await userRepository.update(userId, {
+    const updatedUser = await userRepository.updatePreferences(
+      userId,
       contextual_drafting_enabled,
-      action_item_conversion_enabled,
-    });
+      action_item_conversion_enabled
+    );
     
     if (!updatedUser) {
       return res.status(404).json({ error: 'User not found' });
@@ -99,18 +113,37 @@ router.put('/profile', auth, [
 router.delete('/account', auth, async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
+    console.log('Starting account deletion for user:', userId);
     
-    // Delete the user
+    // First delete user data from our database (this will cascade to related data)
+    // Do this first in case Supabase deletion fails, we can retry
     const deleted = await userRepository.delete(userId);
     
     if (!deleted) {
-      return res.status(404).json({ error: 'User not found' });
+      console.error('Database user not found:', userId);
+      return res.status(404).json({ error: 'User not found in database' });
     }
     
+    // Then delete the user from Supabase Auth
+    const { error: supabaseError } = await supabase.auth.admin.deleteUser(userId);
+    
+    if (supabaseError) {
+      console.error('Supabase deletion error:', supabaseError);
+      // Even if Supabase deletion fails, we've already removed user data
+      // The user can try again or contact support
+      return res.status(500).json({ 
+        error: 'Account data deleted but auth removal failed. Please contact support.' 
+      });
+    }
+    
+    console.log('Successfully deleted account for user:', userId);
     res.json({ message: 'Account deleted successfully' });
   } catch (error) {
     console.error('Account deletion error:', error);
-    res.status(500).json({ error: 'Failed to delete account' });
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : 'Failed to delete account',
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    });
   }
 });
 

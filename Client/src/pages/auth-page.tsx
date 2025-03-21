@@ -82,16 +82,48 @@ export default function AuthPage() {
       setIsLoading(true);
       const result = await login(data);
       if (!result.ok) {
+        loginForm.setValue('password', '');
+        
+        // Check for specific error messages and provide friendly responses
+        if (result.message.includes('Account not found')) {
+          toast({
+            title: "Welcome to Eliza AI",
+            description: "I couldn't find an account with that email. Would you like to create one?",
+            variant: "default",
+            action: (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-white text-primary hover:bg-gray-100"
+                onClick={() => setMode("register")}
+              >
+                Create Account
+              </Button>
+            ),
+          });
+          return;
+        }
+        
+        if (result.message.includes('verify your email')) {
+          toast({
+            title: "Email Verification Needed",
+            description: "Please check your email and verify your account before signing in.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         toast({
-          title: "Error",
+          title: "Sign In Failed",
           description: result.message,
           variant: "destructive",
         });
       }
     } catch (error) {
+      loginForm.setValue('password', '');
       toast({
-        title: "Error",
-        description: "Failed to login. Please try again.",
+        title: "Sign In Failed",
+        description: "We encountered an issue while signing you in. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -104,18 +136,41 @@ export default function AuthPage() {
       setIsLoading(true);
       // Remove confirmPassword as it's not needed in the backend
       const { confirmPassword, ...registerData } = data;
-      const result = await register(registerData);
-      if (!result.ok) {
+      await register(registerData);
+      // Only show success toast if registration succeeds
+      setMode("login");
+    } catch (error: any) {
+      registerForm.setValue('password', '');
+      registerForm.setValue('confirmPassword', '');
+      console.error('Registration error:', error);
+      
+      // Handle Supabase auth errors with friendly Eliza AI messaging
+      if (error.status === 400 && error.message?.includes("already registered") || 
+          (error.code === "42501" && error.message?.includes("row-level security policy"))) {
         toast({
-          title: "Error",
-          description: result.message,
+          title: "Welcome Back!",
+          description: "I see you already have an Eliza AI account! Let's get you signed in instead.",
           variant: "destructive",
         });
+        setMode("login");
+        return;
       }
-    } catch (error) {
+      
+      // Handle other specific error cases with friendly messaging
+      let errorMessage = "I encountered an issue with your registration. Would you mind trying again?";
+      if (error.status === 422) {
+        errorMessage = "That email address doesn't look quite right. Could you please check it?";
+      } else if (error.status === 429 || error.message?.toLowerCase().includes("rate limit")) {
+        errorMessage = "I need a quick moment to process registrations. Please try again in about 60 minutes.";
+      } else if (error.message?.includes("at least 6 characters")) {
+        errorMessage = "For your security, I need a password that's at least 6 characters long.";
+      } else if (error.message?.includes("confirmation email")) {
+        errorMessage = "I'm having trouble sending your confirmation email. Could you try again? If this continues, please check if your email address is correct.";
+      }
+      
       toast({
-        title: "Error",
-        description: "Failed to register. Please try again.",
+        title: "Quick Note",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

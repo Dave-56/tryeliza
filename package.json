@@ -3,22 +3,25 @@
     "version": "1.0.0",
     "private": true,
     "workspaces": [
-      "Client",
-      "Backend"
+        "Client",
+        "Backend"
     ],
     "scripts": {
-      "install:client": "cd Client && npm install",
-      "install:backend": "cd Backend && npm install",
-      "build:client": "cd Client && npm run build",
-      "build:backend": "cd Backend && npm run build",
-      "start": "cd Backend && npm run start:prod",
-      "dev": "concurrently \"cd Client && npm run dev\" \"cd Backend && npm run dev\"",
-      "_postinstall": "cd Client && npm install && npm run build && cd ../Backend && npm install && npm run build"
+        "install:client": "cd Client && npm install",
+        "install:backend": "cd Backend && npm install",
+        "build:client": "cd Client && npm run build",
+        "build:backend": "cd Backend && npm run build",
+        "start": "cd Backend && npm run start:prod",
+        "dev": "concurrently \"cd Client && npm run dev\" \"cd Backend && npm run dev\"",
+        "_postinstall": "cd Client && npm install && npm run build && cd ../Backend && npm install && npm run build"
     },
     "devDependencies": {
-      "concurrently": "^8.0.0"
+        "concurrently": "^8.0.0"
     },
     "engines": {
-      "node": ">=18.0.0"
+        "node": ">=18.0.0"
+    },
+    "dependencies": {
+        "jsonrepair": "^3.12.0"
     }
-  }
+}

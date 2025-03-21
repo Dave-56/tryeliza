@@ -17,7 +17,8 @@ import AuthPage from "@/pages/auth-page";
 import WorkflowPage from "@/pages/workflow"; 
 import { useUser } from "@/hooks/use-user";
 import { Loader2 } from "lucide-react";
-
+import VerifyEmail from "@/pages/verify-email";
+import EmailVerifyCallback from "@/pages/email-verify-callback";
 
 function Router() {
   const { user, isLoading } = useUser();
@@ -27,7 +28,8 @@ function Router() {
   // Handle auth redirection
   useEffect(() => {
     if (!isLoading) {
-      if (!user && location !== '/login' && location !== '/reset-password') {
+      if (!user && location !== '/login' && location !== '/reset-password' && 
+          location !== '/verify-email' && location !== '/email-verify-callback') {
         setLocation('/login');
       } else if (user && location === '/login') {
         setLocation('/');
@@ -57,8 +59,10 @@ function Router() {
   }
 
   // Special routes that don't require authentication and don't show the app layout
-  if (location === '/reset-password') {
-    return <ResetPassword />;
+  if (location === '/reset-password' || location === '/verify-email' || location === '/email-verify-callback') {
+    if (location === '/reset-password') return <ResetPassword />;
+    if (location === '/verify-email') return <VerifyEmail />;
+    return <EmailVerifyCallback />;
   }
 
   // Show auth page for unauthenticated users
@@ -89,6 +93,8 @@ function Router() {
           <Route path="/privacy" component={Privacy} />
           <Route path="/terms" component={Terms} />
           <Route path="/login" component={AuthPage} />
+          <Route path="/verify-email" component={VerifyEmail} />
+          <Route path="/email-verify-callback" component={EmailVerifyCallback} />
           <Route component={NotFound} />
         </Switch>
       </div>

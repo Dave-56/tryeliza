@@ -55,6 +55,12 @@ export default function ResetPassword() {
           variant: "destructive",
         });
       } else {
+        // Clear both password fields
+        form.reset({
+          password: "",
+          confirmPassword: "",
+        });
+        
         toast({
           title: "Success",
           description: "Your password has been updated successfully.",

@@ -3,6 +3,7 @@ import sanitizeHtml from 'sanitize-html';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import EmailReplyParser from 'email-reply-parser';
+import { jsonrepair } from 'jsonrepair';
 import ThreadDebugLogger from './ThreadDebugLogger';
 import { SummarizationResponse } from '../Types/model';
 

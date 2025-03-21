@@ -536,9 +536,9 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
           <div className="flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
             <div className="flex-1">
-              <h3 className="font-medium text-amber-900">Gmail account disconnected</h3>
+              <h3 className="font-medium text-amber-900">Enhance your email experience </h3>
               <p className="text-sm text-amber-700 mt-1">
-                Your Gmail account is currently disconnected. Email sync and new summaries will not work properly.
+              Connect Gmail to unlock smart summaries, action items, and contextual assistance.
               </p>
             </div>
             <Button 
@@ -550,7 +550,7 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                 setLocation('/settings');
               }}
             >
-              Reconnect
+              Connect
             </Button>
           </div>
         </div>

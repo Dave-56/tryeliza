@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LoginCredentials, SignupCredentials, User } from '../types/model';
+import { LoginCredentials, SignupCredentials, User } from '@/types/model';
 import { useLocation } from 'wouter';
-import { getUser, signIn, signOut, signUp, supabase } from '../lib/supabase-client';
 import { useToast } from './use-toast';
+import { supabase, signIn, signUp, signOut, getUser, deleteAccount } from '@/lib/supabase-client';
+import { AuthError } from '@supabase/supabase-js';
 
 type RequestResult = {
   ok: true;
@@ -33,19 +34,30 @@ export function useUser() {
       
       if (error) {
         console.error('Error fetching user data:', error);
+        // If no user data found, return null to trigger re-authentication
+        if (error.code === 'PGRST116') {
+          console.log('User authenticated but profile not found in users table');
+          await supabase.auth.signOut(); // Sign out the user
+          return null;
+        }
+        throw error; // For other errors, throw to trigger error boundary
+      }
+
+      if (!userData) {
+        console.error('No user data found after successful query');
+        return null;
       }
       
-      // Map Supabase user to your User type, using data from users table when available
+      // Map Supabase user to your User type, using data from users table
       return {
         id: supabaseUser.id,
-        email: supabaseUser.email || '',
-        // Prioritize name from the users table, fall back to metadata or email username
-        name: userData?.name || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || '',
-        contextual_drafting_enabled: userData?.contextual_drafting_enabled || supabaseUser.user_metadata?.contextual_drafting_enabled || false,
-        action_item_conversion_enabled: userData?.action_item_conversion_enabled || supabaseUser.user_metadata?.action_item_conversion_enabled || false,
-        timezone: userData?.timezone || 'UTC',
-        is_active: userData?.is_active !== undefined ? userData.is_active : true,
-        created_at: userData?.created_at || new Date().toISOString(),
+        email: userData.email,
+        name: userData.name,
+        contextual_drafting_enabled: userData.contextual_drafting_enabled,
+        action_item_conversion_enabled: userData.action_item_conversion_enabled,
+        timezone: userData.timezone,
+        is_active: userData.is_active,
+        created_at: userData.created_at,
       };
     },
     staleTime: 1000 * 60 * 5, // 5 minutes,
@@ -56,20 +68,60 @@ export function useUser() {
       try {
         const { data, error } = await signIn(credentials.email, credentials.password);
         
-        if (error) throw new Error(error.message);
+        if (error) {
+          // For security, Supabase returns 'Invalid login credentials' for both wrong password
+          // and non-existent user. We'll check the error status to differentiate.
+          if (error.status === 400 && error.message === 'Invalid login credentials') {
+            return { ok: false, message: "The email or password you entered is incorrect. If you don\'t have an account, please sign up." };
+          }
+          
+          if (error.message === 'Invalid login credentials') {
+            return { ok: false, message: 'Incorrect password' };
+          }
+          
+          if (error.message === 'Email not confirmed') {
+            return { ok: false, message: 'Please verify your email address' };
+          }
+          
+          // For session errors, ask user to try again
+          if (error.message.includes('Auth session missing')) {
+            return { ok: false, message: 'Session expired. Please try signing in again.' };
+          }
+          
+          console.error('Unexpected auth error:', error);
+          throw error;
+        }
         
         if (data.user) {
+          // Check if user profile exists in users table
+          const { data: userData, error: profileError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', data.user.id)
+            .single();
+            
+          if (profileError?.code === 'PGRST116' || !userData) {
+            // This handles the case where the user authenticated successfully
+            // but doesn't have a corresponding entry in your users table
+            // Profile doesn't exist, sign out and ask to verify email
+            await supabase.auth.signOut();
+            return { 
+              ok: false, 
+              message: 'Your account requires additional setup. Please complete registration or contact support.' 
+            };
+          }
+          
           queryClient.invalidateQueries({ queryKey: ['user'] });
-          console.log("Login successful")
           setLocation('/');
           return { ok: true };
         }
         
-        return { ok: false, message: 'Login failed' };
+        return { ok: false, message: 'Unable to sign in' };
       } catch (error) {
+        console.error('Login error:', error);
         return {
           ok: false,
-          message: error instanceof Error ? error.message : 'Login failed'
+          message: 'An unexpected error occurred. Please try again.'
         }
       }
     }
@@ -94,30 +146,32 @@ export function useUser() {
     }
   });
 
-  const registerMutation = useMutation<RequestResult, Error, SignupCredentials>({
+  const registerMutation = useMutation<void, AuthError | Error, SignupCredentials>({
     mutationFn: async (credentials) => {
-      try {
-        const { data, error } = await signUp(
-          credentials.email, 
-          credentials.password,
-          credentials.name
-        );
-        
-        if (error) throw new Error(error.message);
-        
-        if (data.user) {
-          queryClient.invalidateQueries({ queryKey: ['user'] });
-          setLocation('/');
-          return { ok: true };
+      const { data, error } = await signUp(
+        credentials.email, 
+        credentials.password,
+        credentials.name
+      );
+      
+      // Pass through the Supabase error directly to maintain status codes and messages
+      if (error) {
+        if ('status' in error) {
+          throw error; // This is a Supabase AuthError
+        } else {
+          // For other errors, wrap them to include status
+          throw new Error(error.message || 'Registration failed');
         }
-        
-        return { ok: false, message: 'Registration failed' };
-      } catch (error) {
-        return { 
-          ok: false, 
-          message: error instanceof Error ? error.message : 'Registration failed' 
-        };
       }
+
+      // Only proceed if we have a user
+      if (!data?.user) {
+        throw new Error('Registration failed. Please try again.');
+      }
+
+      // Success - update queries and redirect
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+      setLocation('/verify-email');
     }
   });
 
@@ -163,31 +217,9 @@ export function useDeleteAccount() {
         return { success: false };
       }
       
-      // For Supabase, we need to use a backend endpoint to delete a user
-      // as the admin APIs are not available in the client
-      const response = await fetch('/api/user', {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-  
-      if (!response.ok) {
-        if (response.status === 401) {
-          toast({
-            variant: "destructive",
-            description: "Please log in to delete account",
-          });
-          setLocation('/login');
-          return { success: false };
-        }
-        throw new Error('Failed to delete account');
-      }
-      
-      return await response.json();
+      return await deleteAccount();
     },
     onSuccess: () => {
-      // Sign out the user after account deletion
-      supabase.auth.signOut();
-      
       toast({
         description: "Account deleted successfully",
       });
@@ -203,7 +235,8 @@ export function useDeleteAccount() {
       console.error('Error deleting account:', error);
       toast({
         variant: "destructive",
-        description: "Failed to delete account",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete account",
       });
     },
   });

@@ -152,10 +152,7 @@ export class DailySummaryRepository extends BaseRepository<DailySummary, InsertD
     
     const results = await this.executeQuery((db) => 
       db.update(this.table)
-        .set({ 
-          status, 
-          updated_at: new Date() 
-        })
+        .set({ status } as Partial<InsertDailySummary>)
         .where(
           and(
             eq(this.table.user_id, userId),
@@ -186,10 +183,7 @@ export class DailySummaryRepository extends BaseRepository<DailySummary, InsertD
     
     const results = await this.executeQuery((db) => 
       db.update(this.table)
-        .set({
-          ...data,
-          updated_at: new Date()
-        })
+        .set(data)
         .where(
           and(
             eq(this.table.user_id, userId),
