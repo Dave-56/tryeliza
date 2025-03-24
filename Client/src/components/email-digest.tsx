@@ -9,7 +9,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {Calendar, Mail, Plane, ChevronDown, ChevronUp, Loader2, CheckCircle2, AlertCircle, AlertTriangle, Wand2, RefreshCcw, Sun, Moon, ChevronLeft, ChevronRight } from "lucide-react";
-import { format, startOfWeek, addDays, isToday, parseISO, subWeeks, isSameDay, differenceInWeeks, addWeeks } from "date-fns";
+import { format, startOfWeek, addDays, isToday, parseISO, subWeeks, isSameDay, differenceInWeeks, addWeeks, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/hooks/use-user";
@@ -294,17 +294,48 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [expandedEmails, setExpandedEmails] = useState<Record<string, boolean>>({});
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   
-  const initializeTimeOfDay = () => {
-    // Get user's timezone
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // Get current hour in user's timezone
-    const currentHour = new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: userTimezone });
-    return parseInt(currentHour) < 16 ? 'morning' : 'evening';
-  }
+  // Get the current URL parameters
+  const params = new URLSearchParams(window.location.search);
+  const dateParam = params.get('date');
+  const periodParam = params.get('period');
+  
+  // Initialize selectedDate from URL parameter if it exists, otherwise use today
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
+    // Get today's date in user's timezone
+    const today = startOfDay(new Date());
+    console.log('Today:', today);
+    
+    // If no date param, use today
+    if (!dateParam) {
+      params.set('date', format(today, 'yyyy-MM-dd'));
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+      return today;
+    }
+    
+    // Parse the date param
+    const parsedDate = parseISO(dateParam);
+    if (isNaN(parsedDate.getTime()) || parsedDate > today) {
+      params.set('date', format(today, 'yyyy-MM-dd'));
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+      return today;
+    }
+    return startOfDay(parsedDate);
+  });
+  
+  const [timeOfDay, setTimeOfDay] = useState<"morning" | "evening">(() => {
+    const defaultPeriod = periodParam === 'morning' || periodParam === 'evening' 
+      ? periodParam 
+      : new Date().getHours() < 16 ? 'morning' : 'evening';
+    
+    // Always ensure period is in URL
+    if (!periodParam) {
+      params.set('period', defaultPeriod);
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
+    return defaultPeriod;
+  });
 
-  const [timeOfDay, setTimeOfDay] = useState<"morning" | "evening">(initializeTimeOfDay());
   const { toast } = useToast();
 
   // Add manual sync mutation
@@ -318,6 +349,15 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   // Handle date selection
   const handleDateSelect = (date: Date | null) => {
     setSelectedDate(date);
+    // Update URL parameter
+    const params = new URLSearchParams(window.location.search);
+    if (date) {
+      params.set('date', format(date, 'yyyy-MM-dd'));
+    } else {
+      params.delete('date');
+    }
+    // Update URL without reloading the page
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
     // Reset expanded states when changing date
     setExpandedCategories({});
     setExpandedEmails({});
@@ -364,10 +404,29 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
     }
   }, [digestData]);
 
+  // Initialize data on mount and handle URL parameters
   useEffect(() => {
-    // Force a refetch when the component mounts or when period or date changes
-    refetch();
-    // This will ensure we always get fresh data when the component loads or parameters change
+    // Get date from URL on mount
+    const params = new URLSearchParams(window.location.search);
+    const dateParam = params.get('date');
+    
+    if (dateParam) {
+      const parsedDate = new Date(dateParam);
+      // Check if the date is valid and not in the future
+      if (!isNaN(parsedDate.getTime()) && parsedDate <= new Date()) {
+        // Only set the date if it's different from current selectedDate
+        if (!selectedDate || format(selectedDate, 'yyyy-MM-dd') !== format(parsedDate, 'yyyy-MM-dd')) {
+          setSelectedDate(parsedDate);
+        }
+      }
+    }
+  }, []); // Only run on mount
+
+  // Handle data fetching when parameters change
+  useEffect(() => {
+    if (selectedDate || timeOfDay) {
+      refetch();
+    }
   }, [timeOfDay, selectedDate, refetch]);
 
   const { data: emailAccounts, isLoading: isLoadingAccounts } = useEmailAccounts();
@@ -564,13 +623,6 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
             <Moon className="mr-2 h-5 w-5" />
             Evening
           </button>
-          {/* <Button 
-            onClick={handleGenerateSummary}
-            disabled={isGenerating}
-            className="ml-4"
-          >
-            {isGenerating ? "Generating..." : "Generate New Summary"}
-          </Button> */}
         </div>
       </div>
 
