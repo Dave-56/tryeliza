@@ -964,6 +964,9 @@ export function validateThreadSummary(response: any): SummarizationResponse {
             return { categories: [], isPending: false, generatedAt: new Date() };
         }
         
+        // Keep track of seen messageIds to prevent duplicates
+        const seenMessageIds = new Set<string>();
+        
         // Process each category
         const processedCategories = parsedResponse.categories.map(category => {
             // Validate category title
@@ -981,8 +984,13 @@ export function validateThreadSummary(response: any): SummarizationResponse {
                 ? category.summaries.map(processSummary)
                 : [];
                 
-            // Filter out invalid summaries (those without messageId)
-            const validSummaries = summaries.filter(summary => summary.messageId);
+            // Filter out invalid summaries and duplicates
+            const validSummaries = summaries.filter(summary => {
+                if (!summary.messageId) return false;
+                if (seenMessageIds.has(summary.messageId)) return false;
+                seenMessageIds.add(summary.messageId);
+                return true;
+            });
             
             // Sort summaries by priority score (descending)
             const sortedSummaries = validSummaries.sort(
@@ -1015,8 +1023,26 @@ export function validateThreadSummary(response: any): SummarizationResponse {
             return categoryOrder.indexOf(a.title) - categoryOrder.indexOf(b.title);
         });
         
+        // Deduplicate summaries across categories
+        const deduplicatedSummaries: { [key: string]: any } = {};
+        sortedCategories.forEach(category => {
+            category.summaries.forEach(summary => {
+                deduplicatedSummaries[summary.messageId] = summary;
+            });
+        });
+        
+        // Reconstruct categories with deduplicated summaries
+        const finalCategories = sortedCategories.map(category => {
+            return {
+                title: category.title,
+                summaries: category.summaries.filter(summary => {
+                    return deduplicatedSummaries[summary.messageId] === summary;
+                })
+            };
+        });
+        
         return {
-            categories: sortedCategories,
+            categories: finalCategories,
             isPending: false,
             generatedAt: new Date()
         };

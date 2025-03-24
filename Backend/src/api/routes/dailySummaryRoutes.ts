@@ -49,7 +49,7 @@ interface DailySummaryResponse {
   categoriesSummary: Array<{
     category: string;
     count: number;
-    items: Array<{
+    summaries: Array<{
       title: string;
       subject: string;
       gmail_id: string;
@@ -149,9 +149,8 @@ router.get('/', auth, async (
 
     if (summary && summary.categories_summary) {
       console.log('[DEBUG] Summary has categories:', summary.categories_summary.length);
-      if (summary.categories_summary[0] && summary.categories_summary[0].items) {
-        console.log('[DEBUG] First category has items:', summary.categories_summary[0].items.length);
-      }
+      console.log('[DEBUG] Full summary object:', JSON.stringify(summary, null, 2));
+      console.log('[DEBUG] Categories summary:', JSON.stringify(summary.categories_summary, null, 2));
     }
     if (!summary) {
       console.log('[DEBUG] No summary found, returning empty response');
@@ -196,9 +195,9 @@ router.get('/', auth, async (
     const sortEmailsByPriority = (categoriesSummary: any[] | null) => {
       if (!categoriesSummary) return [];
       
-      return categoriesSummary.map(category => {
+      const sortedCategories = categoriesSummary.map(category => {
         // Sort the items array by priority_score (highest first)
-        const sortedItems = [...category.items].sort((a, b) => {
+        const sortedItems = [...category.summaries].sort((a, b) => {
           const scoreA = a.priority_score || 50; // Default to medium priority (50) if not provided
           const scoreB = b.priority_score || 50;
           return scoreB - scoreA; // Sort in descending order (higher scores first)
@@ -207,9 +206,14 @@ router.get('/', auth, async (
         // Return a new category object with sorted items
         return {
           ...category,
-          items: sortedItems
+          summaries: sortedItems
         };
       });
+
+      // Log the sorted results
+      console.log('[DEBUG] Sorted categories by priority:', JSON.stringify(sortedCategories, null, 2));
+      
+      return sortedCategories;
     };
 
     // Check if summary is expired and needs refreshing
@@ -223,10 +227,10 @@ router.get('/', auth, async (
           period: summary.period,
           timezone: summary.timezone || 'UTC',
           categoriesSummary: sortEmailsByPriority(summary.categories_summary?.map(category => ({
-            category: category.category,
+            title: category.category,  
             count: category.count,
-            items: category.items?.map(item => ({
-              title: item.subject,
+            summaries: category.summaries?.map(item => ({
+              title: item.subject,  
               subject: item.subject,
               gmail_id: item.gmail_id,
               sender: item.sender,
@@ -255,10 +259,10 @@ router.get('/', auth, async (
         period: summary.period,
         timezone: summary.timezone || 'UTC',
         categoriesSummary: sortEmailsByPriority(summary.categories_summary?.map(category => ({
-          category: category.category,
+          title: category.category,  
           count: category.count,
-          items: category.items?.map(item => ({
-            title: item.subject,
+          summaries: category.summaries?.map(item => ({
+            title: item.subject,  
             subject: item.subject,
             gmail_id: item.gmail_id,
             sender: item.sender,

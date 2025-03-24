@@ -1,5 +1,3 @@
-import { Task } from '../db/schema'
- 
 export enum RequestHeaders {
     AUTH_HEADER = 'Authorization',
     USER_ID = 'x-user-id',
@@ -83,6 +81,7 @@ export interface EmailMessage {
     headers: EmailHeaders;
     body: string;
     htmlBody?: string;
+    task?: Task;  // Optional task associated with this email
 }
 
 export interface EmailHeaders {
@@ -191,12 +190,20 @@ export enum PriorityLevel {
     LOW = "low"
 }
 
+export interface Task {
+    id: number;
+    title: string;
+    status: string;
+    priority: string;
+    due_date?: string;
+    description?: string;
+}
+
 export interface EmailCategorization {
     isActionRequired: boolean;
     task?: Task;
 }
 
-// Add this after the EmailCategorization interface in model.ts
 export interface TaskExtractionResponse {
     requires_action: boolean;
     task?: {

@@ -20,6 +20,9 @@ export default function AuthCallback() {
         if (sessionError) throw sessionError;
 
         if (session?.user?.email_confirmed_at) {
+          // Get user's actual timezone
+          const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          
           // First check if user profile already exists
           const { data: existingUser } = await supabase
             .from('users')
@@ -35,7 +38,7 @@ export default function AuthCallback() {
                 id: session.user.id,
                 email: session.user.email,
                 name: session.user.user_metadata.name,
-                timezone: session.user.user_metadata.timezone,
+                timezone: userTimezone,
                 contextual_drafting_enabled: true,
                 action_item_conversion_enabled: true,
                 created_at: new Date().toISOString(),

@@ -7,9 +7,9 @@ export interface DailySummaryResponse {
     period: string;
     timezone: string;
     categoriesSummary: Array<{
-      count: number;
-      category: string;
-      items: Array<{
+      count?: number;
+      title: string;  // Changed from 'category' to 'title' to match database schema
+      summaries: Array<{
         title: string;
         subject: string;
         gmail_id: string;
@@ -52,7 +52,8 @@ export interface DailySummaryResponse {
   // Frontend category type
   export interface CategorySummary {
     category: string;
-    emails: EmailSummary[];
+    count: number;
+    summaries: EmailSummary[];
     summary: string;
   }
   

@@ -205,7 +205,7 @@ export function useDeleteAccount() {
   const [_, setLocation] = useLocation();
   const { user } = useUser();
 
-  const mutation = useMutation<{ success: boolean }, Error, void>({
+  const mutation = useMutation<{ success: boolean, message: string }, Error, void>({
     mutationFn: async () => {
       // Check if user is logged in
       if (!user || !user.id) {
@@ -214,22 +214,24 @@ export function useDeleteAccount() {
           description: "Please log in to delete account",
         });
         setLocation('/login');
-        return { success: false };
+        return { success: false, message: "Please log in to delete account" };
       }
       
       return await deleteAccount();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
-        description: "Account deleted successfully",
+        description: data.message || "Account deleted successfully",
       });
       
       // Clear local state
       queryClient.setQueryData(['user'], null);
       queryClient.invalidateQueries({ queryKey: ['user'] });
       
-      // Redirect to home page
-      window.location.href = '/';
+      // Add a small delay before redirect to allow toast to be shown
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
     },
     onError: (error) => {
       console.error('Error deleting account:', error);

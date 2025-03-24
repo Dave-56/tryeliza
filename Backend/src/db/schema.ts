@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, jsonb, uuid, date, primaryKey, time, numeric, foreignKey} from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, jsonb, uuid, date, primaryKey, time, numeric, foreignKey, unique} from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -37,7 +37,10 @@ export const emailAccounts = pgTable("email_accounts", {
   }>(),
   created_at: timestamp("created_at").defaultNow(),
   updated_at: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  // Add unique constraint to prevent duplicate accounts
+  user_email_unique: unique("user_email_unique").on(table.user_id, table.email_address),
+}));
 
 export const emails = pgTable("emails", {
   id: serial("id").primaryKey(),
@@ -221,7 +224,7 @@ export const dailySummaries = pgTable("daily_summaries", {
   categories_summary: jsonb("categories_summary").$type<{
     category: string;
     count: number;
-    items: Array<{
+    summaries: Array<{
       subject: string;
       gmail_id: string;
       sender: string;

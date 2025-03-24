@@ -1,7 +1,7 @@
 // EmailSummaryService.ts
 import { db } from '../../db/index.js';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
-import { users, EmailAccount, emailAccounts, dailySummaries, emails, processedEmails, DailySummary } from '../../db/schema.js';
+import { users, EmailAccount, emailAccounts, dailySummaries, emails, processedEmails, tasks, DailySummary } from '../../db/schema.js';
 import { EmailProcessingService } from '../Email/EmailProcessingService';
 import { SummarizationResponse, EmailThread, EmailMessage } from '../../Types/model.js';
 import { emailSyncService } from '../EmailSync.js';
@@ -63,9 +63,7 @@ export class EmailSummaryService {
         
         // Get threads for the time range (now with freshly synced data)
         const threads = await this.getThreadsForTimeRange(accounts, timeRange, userId, period);
-        
-        // Generate summary using existing summarization logic
-        // const summary = await this.emailProcessingService.summarizeThreads(threads);
+
 
         // Instead of generating a new summary, retrieve the one created during sync
         const summary = await this.getLatestDailySummary(userId);
@@ -138,13 +136,16 @@ export class EmailSummaryService {
         
         console.log(`Querying emails for account ${account.id} (${account.email_address}) in time range`);
         
-        // Query emails for this account within the time range
+        // Query emails and their associated tasks for this account within the time range
         const emailsInRange = await db.query.emails.findMany({
           where: and(
             eq(emails.account_id, account.id),
             sql`${emails.received_at} >= ${startISO}`,
             sql`${emails.received_at} <= ${endISO}`
           ),
+          with: {
+            tasks: true // Include associated tasks
+          },
           orderBy: [desc(emails.received_at)]
         });
         
@@ -157,7 +158,7 @@ export class EmailSummaryService {
         for (const email of emailsInRange) {
           // Get threadId from metadata
           const metadata = email.metadata as { threadId?: string } || {};
-          const threadId = metadata.threadId || email.gmail_id; // Fallback to gmail_id if no threadId
+          const threadId = metadata.threadId || email.gmail_id;
           
           if (!threadMap.has(threadId)) {
             threadMap.set(threadId, []);
@@ -172,10 +173,19 @@ export class EmailSummaryService {
             headers: {
               subject: email.subject || '',
               from: email.sender || '',
-              to: '', // No direct 'to' field in schema
+              to: '', 
               date: email.received_at?.toISOString() || ''
             },
-            body: '' // No direct body field in schema
+            body: '',
+            // Add task information if this email has an associated task
+            task: email.tasks?.[0] ? {
+              id: email.tasks[0].id,
+              title: email.tasks[0].title,
+              status: email.tasks[0].status,
+              priority: email.tasks[0].priority,
+              due_date: email.tasks[0].due_date?.toISOString(),
+              description: email.tasks[0].description
+            } : undefined
           };
           
           threadMap.get(threadId)?.push(message);
@@ -184,9 +194,14 @@ export class EmailSummaryService {
         // Include both time-based emails and webhook-processed emails that haven't been included in a summary yet
         console.log(`Querying unprocessed emails for account ${account.id} that haven't been included in a summary yet`);
         const processedEmailResults = await db
-          .select()
+          .select({
+            emails: emails,
+            processedEmails: processedEmails,
+            tasks: tasks
+          })
           .from(emails)
           .innerJoin(processedEmails, eq(emails.gmail_id, processedEmails.email_id))
+          .leftJoin(tasks, eq(emails.gmail_id, tasks.email_id))  // Include tasks
           .where(and(
             eq(emails.user_id, userId),
             eq(emails.account_id, account.id),
@@ -198,10 +213,9 @@ export class EmailSummaryService {
         
         // Process these emails and add them to the threadMap
         for (const result of processedEmailResults) {
-          // Extract the email object from the join result
           const email = result.emails;
+          const task = result.tasks;
           
-          // Similar processing as above
           const metadata = email.metadata as { threadId?: string } || {};
           const threadId = metadata.threadId || email.gmail_id;
           
@@ -220,7 +234,16 @@ export class EmailSummaryService {
               to: '',
               date: email.received_at?.toISOString() || ''
             },
-            body: ''
+            body: '',
+            // Add task information if this email has an associated task
+            task: task ? {
+              id: task.id,
+              title: task.title,
+              status: task.status,
+              priority: task.priority,
+              due_date: task.due_date?.toISOString(),
+              description: task.description
+            } : undefined
           };
           
           threadMap.get(threadId)?.push(message);
@@ -228,7 +251,6 @@ export class EmailSummaryService {
         
         // After processing, mark these emails as included in summary
         if (processedEmailResults.length > 0) {
-          // Extract the email IDs from the processed results
           const emailIds = processedEmailResults.map(result => result.emails.gmail_id);
           
           await db.update(processedEmails)
@@ -241,61 +263,45 @@ export class EmailSummaryService {
                 eq(processedEmails.user_id, userId),
                 eq(processedEmails.account_id, account.id),
                 eq(processedEmails.included_in_summary, false),
-                // Only update the specific emails we just processed
-                sql`${processedEmails.email_id} IN (${emailIds.join(',')})`
+                inArray(processedEmails.email_id, emailIds)
               )
             );
         }
-
-        // Convert thread map to EmailThread array
+        
+        // Convert threadMap to array of EmailThread objects
         for (const [threadId, messages] of threadMap.entries()) {
-          if (messages.length > 0) {
-            const thread: EmailThread = {
-              id: threadId,
-              messages: messages,
-              subject: messages[0].headers.subject || ''
-            };
-            
-            threads.push(thread);
-          }
+          threads.push({
+            id: threadId,
+            messages: messages
+          });
         }
+        
       } catch (error) {
-        console.error(`Error fetching emails for account ${account.id}:`, error);
+        console.error(`Error processing account ${account.id}:`, error);
         // Continue with next account
       }
     }
     
-    console.log(`Email summary statistics:`);
-    console.log(`- Emails in time range (${timeRange.start.toISOString()} to ${timeRange.end.toISOString()}): ${timeRangeEmailCount}`);
-    console.log(`- Unprocessed emails outside time range: ${unprocessedEmailCount}`);
-    console.log(`- Total threads found across all accounts: ${threads.length}`);
-    
+    console.log(`Total emails found: ${timeRangeEmailCount} in time range, ${unprocessedEmailCount} unprocessed`);
     return threads;
   }
   
   private async storeSummary(tx: any, userId: string, period: 'morning' | 'evening', summary: SummarizationResponse) {
-    // Get user's timezone preference
-    const user = await tx.query.users.findFirst({
-      where: eq(users.id, userId)
-    });
+    // Get user's timezone or default to system timezone
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
-    // Use user's timezone or default to UTC if user not found
-    const timezone = user?.timezone || 'UTC';
-    
-    // Create date string in the user's timezone
+    // Create date string in the user's timezone using en-CA locale for YYYY-MM-DD format
     const now = new Date();
-    // Format date as YYYY-MM-DD in the user's timezone
-    const summaryDateStr = now.toLocaleDateString('en-US', { 
-      timeZone: timezone,
+    const summaryDateStr = new Intl.DateTimeFormat('en-CA', {
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit'
-    }).split('/').reverse().join('-').replace(/(\d{4})-(\d{2})-(\d{2})/, '$1-$3-$2');
+      day: '2-digit',
+      timeZone: userTimezone
+    }).format(now);
     
-    console.log(`Creating summary with date ${summaryDateStr} using timezone ${timezone}`);
+    console.log(`Creating summary with date ${summaryDateStr} using timezone ${userTimezone}`);
     
-    // Create a sanitized version of the summary with Date objects converted to strings
-    // for the jsonb field, but keep Date objects for timestamp fields
+    // Create a sanitized version of the summary
     const sanitizedSummary = {
       ...summary,
       generatedAt: summary.generatedAt || now
@@ -322,8 +328,8 @@ export class EmailSummaryService {
         .set({
           last_run_at: now,
           email_count: emailCount,
-          categories_summary: sanitizedSummary.categories || [],
-          status: 'completed',
+          [dailySummaries.categories_summary.name]: sanitizedSummary.categories || [],
+          [dailySummaries.status.name]: 'completed',
           updated_at: now
         })
         .where(and(
@@ -340,11 +346,11 @@ export class EmailSummaryService {
         summary_date: summaryDateStr,
         period: period,
         scheduled_time: period === 'morning' ? '07:00:00' : '16:00:00',
-        last_run_at: now, // Use Date object directly, not string
-        email_count: sanitizedSummary.categories.reduce((count, category) => count + (category.summaries?.length || 0), 0) || 0,
-        categories_summary: sanitizedSummary.categories || [],
-        status: 'completed'
-        // Let created_at and updated_at use their default values
+        last_run_at: now,
+        email_count: emailCount,
+        [dailySummaries.categories_summary.name]: sanitizedSummary.categories || [],
+        [dailySummaries.status.name]: 'completed',
+        timezone: userTimezone
       });
     }
   }
@@ -467,7 +473,7 @@ export class EmailSummaryService {
         .map(([category, summaries]) => ({
           category,
           count: summaries.length,
-          items: summaries.map(summary => {
+          summaries: summaries.map(summary => {
             // Access the messageId from the summary object
             const gmail_id = summary.messageId || '';
             // Look up sender from our map, or use empty string if not found
@@ -508,7 +514,7 @@ export class EmailSummaryService {
           
           // First, add all existing categories
           for (const category of existingData) {
-            mergedSummary[category.category] = category.items || [];
+            mergedSummary[category.category] = category.summaries || [];
           }
           
           // Then, add new summaries, avoiding duplicates by message ID
@@ -518,7 +524,7 @@ export class EmailSummaryService {
             }
             
             // Add only new items that don't exist in the current category
-            for (const item of category.items) {
+            for (const item of category.summaries) {
               const isDuplicate = mergedSummary[category.category].some(
                 existing => existing.gmail_id === item.gmail_id
               );
@@ -540,43 +546,42 @@ export class EmailSummaryService {
           const mergedCategoriesSummary = Object.keys(mergedSummary).map(category => ({
             category,
             count: mergedSummary[category].length,
-            items: mergedSummary[category]
+            summaries: mergedSummary[category]
           }));
 
           console.log('Categories after merging:', mergedCategoriesSummary.map(c => c.category));
           // Update the existing summary with merged data
           await db.update(dailySummaries)
           .set({
-              categories_summary: mergedCategoriesSummary,
-              status: 'completed',
-              updated_at: new Date() 
+              [dailySummaries.categories_summary.name]: mergedCategoriesSummary,
+              [dailySummaries.status.name]: 'completed',
+              [dailySummaries.updated_at.name]: new Date() 
           })
           .where(and(
-            eq(dailySummaries.user_id, userId),
-            eq(dailySummaries.summary_date, today),
-            eq(dailySummaries.period, period)
+              eq(dailySummaries.user_id, userId),
+              eq(dailySummaries.summary_date, today),
+              eq(dailySummaries.period, period)
           ));
 
           console.log("Daily summary updated with merged data for user:", userId, "date:", today, "period:", period);
       } else {
           // Insert a new summary
-          await db.insert(dailySummaries)
-          .values({
+          await db.insert(dailySummaries).values({
               user_id: userId,
               summary_date: today,
               period,
-              categories_summary: categoriesSummaryData,
-              status: 'completed',
+              [dailySummaries.categories_summary.name]: categoriesSummaryData,
+              [dailySummaries.status.name]: 'completed',
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               cache_duration_hours: 4 // Cache for 4 hours by default
           })
           .onConflictDoUpdate({
-            target: [dailySummaries.user_id, dailySummaries.summary_date, dailySummaries.period],
-            set: {
-                categories_summary: categoriesSummaryData,
-                status: 'completed',
-                updated_at: new Date()
-            }
+              target: [dailySummaries.user_id, dailySummaries.summary_date, dailySummaries.period],
+              set: {
+                  [dailySummaries.categories_summary.name]: categoriesSummaryData,
+                  [dailySummaries.status.name]: 'completed',
+                  [dailySummaries.updated_at.name]: new Date()
+              }
           });
 
           console.log("Daily summary saved/updated for user:", userId, "date:", today, "period:", period);

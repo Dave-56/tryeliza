@@ -82,29 +82,36 @@ export const signOut = async () => {
 
 // Function to delete user account
 export const deleteAccount = async () => {
-  // We need to make a backend call since Supabase user deletion requires admin privileges
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
 
-  const response = await fetch('/api/users/account', {
-    method: 'DELETE',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`
+  try {
+    // Get session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    // Call our backend endpoint to handle complete deletion
+    const response = await fetch('/api/users/account', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    });
+  
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || 'Failed to delete account');
     }
-  });
+  
+    // Sign out locally after successful deletion
+    await signOut();
 
-  if (!response.ok) {
-    const error = await response.text();
+    return { success: true, message: "Account deleted successfully"};
+  } catch (error) {
     console.error('Account deletion error:', error);
-    throw new Error(error || 'Failed to delete account');
+    throw error;
   }
-
-  // Sign out the user after successful deletion
-  await signOut();
-
-  return { success: true };
 };
 
 // Function to request a password reset

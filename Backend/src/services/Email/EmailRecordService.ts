@@ -195,6 +195,10 @@ export class EmailRecordService {
      * Update the status of processed emails
      */
     public async updateProcessedEmailsStatus(tx: any, messagesToProcess: any[], userId: string, requiresAction: boolean) {
+        // Get current hour to determine summary period
+        const currentHour = new Date().getHours();
+        const summaryPeriod = currentHour < 12 ? 'morning' : 'evening';
+
         for (const message of messagesToProcess) {
             await tx.update(processedEmails)
                 .set({
@@ -205,6 +209,8 @@ export class EmailRecordService {
                             requires_action: requiresAction
                         }
                     },
+                    included_in_summary: requiresAction, // Set to true if this email requires action (i.e., created a task)
+                    summary_period: requiresAction ? summaryPeriod : null, // Set period only if included in summary
                     processed_at: new Date()
                 })
                 .where(and(

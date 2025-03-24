@@ -56,25 +56,6 @@ export class EmailProcessingService implements IEmailProcessingService {
      */
     async summarizeThreads(threads: EmailThread[], userId?: string): Promise<SummarizationResponse> {
         try {
-             // Add debug logging to see the structure of incoming threads
-             ThreadDebugLogger.log('Threads received for summarization', {
-                threadCount: threads.length,
-                threadSample: threads.slice(0, 1).map(t => ({
-                    id: t.id,
-                    messageCount: t.messages.length,
-                    firstMessageSample: t.messages.length > 0 ? {
-                        bodyType: typeof t.messages[0].body,
-                        snippetType: typeof t.messages[0].snippet,
-                        isBodyEmpty: t.messages[0].body === null || 
-                                    t.messages[0].body === undefined || 
-                                    (typeof t.messages[0].body === 'object' && Object.keys(t.messages[0].body).length === 0),
-                        isSnippetEmpty: t.messages[0].snippet === null || 
-                                       t.messages[0].snippet === undefined || 
-                                       (typeof t.messages[0].snippet === 'object' && Object.keys(t.messages[0].snippet).length === 0),
-                        headers: t.messages[0].headers
-                    } : 'No messages'
-                }))
-            });
             // Clean email content before summarization
             const cleanedThreads = await Promise.all(threads.map(async thread => {
                 // Process all messages in parallel
@@ -101,16 +82,13 @@ export class EmailProcessingService implements IEmailProcessingService {
                     // Use subject as fallback content if body and snippet are empty
                 if (!cleanedBody && !cleanedSnippet && message.headers?.subject) {
                     cleanedBody = `Subject: ${message.headers.subject}`;
-                    ThreadDebugLogger.log('Using subject as fallback for empty body/snippet', {
-                        messageId: message.id,
-                        subject: message.headers?.subject
-                    });
                 }
                     
                     return {
                         ...message,
                         body: cleanedBody,
-                        snippet: cleanedSnippet
+                        snippet: cleanedSnippet,
+                        task: message.task
                     };
                 }));
                 

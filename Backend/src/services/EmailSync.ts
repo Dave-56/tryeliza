@@ -1,6 +1,6 @@
 import { db } from '../db/index';
 import { eq, desc, and, inArray } from 'drizzle-orm';
-import { emailAccounts, users, dailySummaries, emails, DailySummary } from '../db/schema';
+import { emailAccounts, users, dailySummaries, emails, DailySummary, tasks, processedEmails } from '../db/schema';
 import { GoogleService } from './Google/GoogleService';
 import { EmailProcessingService } from './Email/EmailProcessingService';
 import { EmailSummaryService } from './Summary/EmailSummaryService';
@@ -85,27 +85,6 @@ export class EmailSyncService {
             startOfToday.getTime().toString()
           );
 
-          // Debug logging to check thread data immediately after fetching
-          ThreadDebugLogger.log('Threads fetched from Gmail', {
-            threadCount: threads.length,
-            threadSample: threads.slice(0, 2).map(thread => ({
-              id: thread.id,
-              messageCount: thread.messages.length,
-              messages: thread.messages.map(msg => ({
-                id: msg.id,
-                bodyType: typeof msg.body,
-                bodyLength: typeof msg.body === 'string' ? msg.body.length : 0,
-                bodyEmpty: !msg.body,
-                bodyFirstChars: typeof msg.body === 'string' ? msg.body.substring(0, 100) : 'Not a string',
-                snippetType: typeof msg.snippet,
-                snippetLength: typeof msg.snippet === 'string' ? msg.snippet.length : 0,
-                snippetEmpty: !msg.snippet,
-                headerSubject: msg.headers?.subject || 'No subject',
-                headerFrom: msg.headers?.from || 'No sender'
-              }))
-            }))
-          });
-          
           console.log("Messages fetched:", threads.length);
 
           stats.synced += threads.length;
@@ -123,15 +102,7 @@ export class EmailSyncService {
             allThreads.push(preservedThread);
           });
 
-          // Debug log to verify body type
-          ThreadDebugLogger.log('Thread body types after adding to allThreads', {
-            threadCount: allThreads.length,
-            lastAddedThreads: allThreads.slice(-threads.length).map(t => ({
-              id: t.id,
-              bodyType: typeof t.messages[0]?.body,
-              bodyPreview: t.messages[0]?.body ? t.messages[0].body.substring(0, 50) : 'no body'
-            }))
-          });
+
 
           // Process each thread (limit to first 20)
           const threadsToProcess = threads.slice(0, 20);
@@ -168,29 +139,38 @@ export class EmailSyncService {
       // Generate summary for all collected threads
       console.log("Generating summary for threads:", allThreads.length);
 
-      // Right before calling summarizeThreads
-      ThreadDebugLogger.log('Threads right before summarization', {
-        threadCount: allThreads.length,
-        threadSample: allThreads.slice(0, 2).map(thread => ({
-          id: thread.id,
-          bodyType: thread.messages[0]?.body ? typeof thread.messages[0].body : 'undefined',
-          bodyEmpty: !thread.messages[0]?.body,
-          bodyIsObject: thread.messages[0]?.body && typeof thread.messages[0].body === 'object',
-          bodyContent: thread.messages[0]?.body ? 
-            (typeof thread.messages[0].body === 'string' ? 
-              thread.messages[0].body : 
-              JSON.stringify(thread.messages[0].body)) : 
-            'No body content',
-          bodyFullObject: thread.messages[0]?.body && typeof thread.messages[0].body === 'object' ? 
-            thread.messages[0].body : 
-            null,
-          bodyKeys: thread.messages[0]?.body && typeof thread.messages[0].body === 'object' ? 
-            Object.keys(thread.messages[0].body) : 
-            []
-        }))
-      });
+      // Fetch tasks marked for summary inclusion
+      const tasksForSummary = await db
+        .select({
+          email_id: processedEmails.email_id,
+          task: tasks
+        })
+        .from(processedEmails)
+        .innerJoin(tasks, eq(tasks.email_id, processedEmails.email_id))
+        .where(and(
+          eq(processedEmails.user_id, userId),
+          eq(processedEmails.included_in_summary, true)
+        ));
 
-      const summary = await this.emailProcessingService.summarizeThreads(allThreads, userId);
+      // Create map of email_id to task
+      const taskMap = new Map(tasksForSummary.map(t => [t.email_id, t.task]));
+
+      // Add tasks to threads
+      const threadsWithTasks = allThreads.map(thread => ({
+        ...thread,
+        messages: thread.messages.map(msg => ({
+          ...msg,
+          task: taskMap.get(msg.id) ? {
+            ...taskMap.get(msg.id),
+            due_date: taskMap.get(msg.id).due_date?.toISOString() || null,
+            created_at: taskMap.get(msg.id).created_at?.toISOString() || null,
+            updated_at: taskMap.get(msg.id).updated_at?.toISOString() || null,
+            received_date: taskMap.get(msg.id).received_date?.toISOString() || null
+          } : undefined
+        }))
+      }));
+
+      const summary = await this.emailProcessingService.summarizeThreads(threadsWithTasks, userId);
       console.log("Summary generated successfully");
 
       // Save the summary to database

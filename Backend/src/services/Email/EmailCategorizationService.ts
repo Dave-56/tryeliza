@@ -80,7 +80,7 @@ export class EmailCategorizationService implements IEmailCategorizationService {
                         // Continue with task extraction even if email record creation fails
                     }
                     
-                    // If both rule-based and ML are not confident enough, use LLM
+                    // Query LLM for task data
                     const taskData = await this.agentService.extractTaskFromEmail(
                         emailThread, 
                         emailAccount.email_address,
@@ -94,12 +94,6 @@ export class EmailCategorizationService implements IEmailCategorizationService {
                     let task = null;
                     if (requiresAction) {
                         task = await this.taskService.createTaskAndActionItems(tx, taskData, emailThread, emailAccount);
-
-                        // Store the category with the email thread in the database
-                        // await tx.query(
-                        //     'UPDATE email_threads SET category = $1 WHERE id = $2',
-                        //     ['Important Info', emailThread.id]
-                        // );
                     }
                     
                     return {

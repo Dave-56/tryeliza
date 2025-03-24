@@ -10,6 +10,7 @@ import {
   EmailDigestResponse, 
   CategorySummary
 } from '../types/email-digest';
+import { useEmailAccounts } from '@/hooks/use-email'; // Import useEmailAccounts hook
 
 // Helper function to determine the appropriate locale
 function getAppropriateLocale() {
@@ -70,12 +71,28 @@ export function formatUTCToLocal(utcDateString: string): string {
 // Main email digest hook
 export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?: Date | null) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: emailAccounts } = useEmailAccounts();
+  const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive);
 
   return useQuery<BackendResponse<DailySummaryResponse>, Error, EmailDigestResponse>({
     queryKey: ['email-digest', period, date ? format(date, 'yyyy-MM-dd') : undefined],
     queryFn: async () => {
       if (!apiClient.isAuthenticated()) {
         throw new Error('User not authenticated');
+      }
+
+      if (!isGmailConnected) {
+        // Instead of throwing an error, return a valid response structure
+        return {
+          isSuccess: true,
+          data: {
+            categoriesSummary: [],
+            lastUpdated: new Date().toISOString(),
+            currentServerTime: new Date().toISOString()
+          },
+          error: null
+        };
       }
       
       let url = `/api/daily-summaries?period=${period}`;
@@ -86,7 +103,7 @@ export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?:
       }
       
       const response = await apiClient.fetchWithAuth<DailySummaryResponse>(url);
-      
+      console.log('Raw backend response:', response);
       return response;
     },
     select: transformDailySummaryToDigest,
@@ -108,6 +125,8 @@ interface TriggerSummaryResponse {
 export function useTriggerSummary() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: emailAccounts } = useEmailAccounts();
+  const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive);
 
   return useMutation<
     { data: TriggerSummaryResponse; period: 'morning' | 'evening' },
@@ -117,6 +136,10 @@ export function useTriggerSummary() {
     mutationFn: async (period: 'morning' | 'evening' = 'evening') => {
       if (!apiClient.isAuthenticated()) {
         throw new Error('User not authenticated');
+      }
+
+      if (!isGmailConnected) {
+        throw new Error('Please connect your Gmail account to generate smart summaries');
       }
       console.log("Period from frontend mutation: ", period);
       const response = await apiClient.fetchWithAuth<TriggerSummaryResponse>('/api/daily-summaries/trigger', {
@@ -164,7 +187,7 @@ function transformDailySummaryToDigest(response: BackendResponse<DailySummaryRes
       console.log('No categories summary found or request not successful');
       console.log('Response data:', response.data);
       // console.log('Response success:', response.isSuccess);
-      // console.log('Response error:', response.error);
+      console.log('Response lastUpdated:', response.data?.lastUpdated);
       return {
         connected: false,
         message: response.error || 'Failed to fetch email digest',
@@ -186,33 +209,40 @@ function transformDailySummaryToDigest(response: BackendResponse<DailySummaryRes
     console.log('Full response structure:', JSON.stringify(response.data, null, 2));
     
     // Map the backend structure to the frontend expected structure
-    const categories: CategorySummary[] = response.data?.categoriesSummary 
-      ? response.data.categoriesSummary.map(cat => {
-          // Map to the updated EmailSummary interface
-          const emails = cat.items.map(item => ({
-            title: item.title || item.subject || 'No Subject',
-            subject: item.subject || 'No Subject',
-            headline: item.headline || '',
-            gmail_id: item.gmail_id || '',
-            receivedAt: formatUTCToLocal(item.receivedAt || new Date().toISOString()),
-            sender: item.sender || '',
-            is_processed: item.is_processed || false,
-            priority_score: item.priority_score,
-            insights: item.insights
-          }));
-          
-          return {
-            category: cat.category,
-            emails: emails,
-            summary: `${emails.length} ${cat.category.toLowerCase()} ${emails.length === 1 ? 'email' : 'emails'}`
-          };
-        })
-      : [];
+    const categoryMap = new Map<string, any[]>();
+    
+    // First, group all summaries by category
+    if (response.data?.categoriesSummary) {
+      response.data.categoriesSummary.forEach(cat => {
+        const categoryName = cat.title || cat.category || 'Uncategorized';
+        const existingSummaries = categoryMap.get(categoryName) || [];
+        const newSummaries = (cat.summaries || []).map(item => ({
+          title: item.title || item.subject || 'No Subject',
+          subject: item.subject || 'No Subject',
+          headline: item.headline || '',
+          gmail_id: item.gmail_id || '',
+          receivedAt: formatUTCToLocal(item.receivedAt || new Date().toISOString()),
+          sender: item.sender || '',
+          is_processed: item.is_processed || false,
+          priority_score: item.priority_score,
+          insights: item.insights
+        }));
+        categoryMap.set(categoryName, [...existingSummaries, ...newSummaries]);
+      });
+    }
+
+    // Then convert the map to our CategorySummary array
+    const categories: CategorySummary[] = Array.from(categoryMap.entries()).map(([categoryName, summaries]) => ({
+      category: categoryName,
+      count: summaries.length,
+      summaries,
+      summary: `${summaries.length} email${summaries.length === 1 ? '' : 's'} in ${categoryName}`
+    }));
     
     // Create the result object with only lastUpdated for UI
     const result = {
       connected: true,
-      categories: categories.sort((a, b) => b.emails.length - a.emails.length),
+      categories: categories.sort((a, b) => b.summaries.length - a.summaries.length),
       // If there are no categories, set lastUpdated to indicate data is not available
       lastUpdated: categories.length === 0 
         ? "Not available" 

@@ -39,7 +39,8 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
                             from: msg.headers.from,
                             to: msg.headers.to,
                             date: msg.headers.date,
-                            content: msg.body
+                            content: msg.body,
+                            task: msg.task  // The prompt will use this to categorize as Important Info
                         }))
                     })),
                     currentDate: new Date().toISOString()

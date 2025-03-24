@@ -77,7 +77,20 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
     console.log("Going to next week, current offset:", weekOffset);
     // Only allow going forward if we're not already at the current week
     if (weekOffset < 0) {
-      setWeekOffset(prev => prev + 1);
+      const newOffset = weekOffset + 1;
+      setWeekOffset(newOffset);
+      
+      // If there's a selected date, update it to the same day in the next week
+      if (selectedDate) {
+        const newDate = addWeeks(selectedDate, 1);
+        // Only update if the new date is not in the future
+        if (newDate <= now) {
+          onDateSelect(newDate);
+        } else {
+          // If the new date would be in the future, deselect the date
+          onDateSelect(null);
+        }
+      }
     }
   };
   
@@ -104,14 +117,19 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
     if (selectedDate && !isSelectedDateInCurrentWeek) {
       // Calculate how many weeks back we need to go
       const selectedWeekStart = startOfWeek(selectedDate);
+      const currentWeekStart = startOfWeek(now);
       const weekDiff = differenceInWeeks(currentWeekStart, selectedWeekStart);
       
-      if (weekDiff > 0) {
-        // Only navigate if the selected date is in the past
+      if (weekDiff >= 0) {
+        // Only navigate if the selected date is in the past or present
         setWeekOffset(-weekDiff);
+      } else {
+        // If somehow we got a future date, reset to current week
+        setWeekOffset(0);
+        onDateSelect(null);
       }
     }
-  }, [selectedDate, isSelectedDateInCurrentWeek, currentWeekStart]);
+  }, [selectedDate, isSelectedDateInCurrentWeek, now]);
 
   return (
     <div className="mt-2 mb-6 relative">
@@ -276,7 +294,6 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
 
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [expandedEmails, setExpandedEmails] = useState<Record<string, boolean>>({});
-  const [acknowledgedEmails, setAcknowledgedEmails] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   
   const initializeTimeOfDay = () => {
@@ -362,10 +379,8 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   const isLoadingState = Boolean(
     isLoadingUser ||
     isLoadingAccounts ||
-    (isLoading && !digestData) ||
-    (isFetching && !digestData)
+    (isLoading && !error) // Only show loading if we're loading for the first time and there's no error
   );
-
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({
@@ -381,33 +396,21 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
     }));
   };
 
-  const handleAcknowledge = (gmail_id: string) => {
-    setAcknowledgedEmails(prev => {
-      const newSet = new Set(prev);
-      newSet.add(gmail_id);
-      return newSet;
-    });
-    toast({
-      description: "Email acknowledged",
-      duration: 2000
+  // Filter emails by time of day
+  const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
+    return emails.filter(email => {
+      if (!email.receivedAt) return timeOfDay === "morning"; // Default to morning if no timestamp
+      
+      const emailDate = new Date(email.receivedAt);
+      const hours = emailDate.getHours();
+      
+      if (timeOfDay === "morning") {
+        return hours >= 5 && hours < 12; // 5 AM to 12 PM
+      } else {
+        return hours >= 12 || hours < 5; // 12 PM to 5 AM
+      }
     });
   };
-
-  // Filter emails by time of day
-const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
-  return emails.filter(email => {
-    if (!email.receivedAt) return timeOfDay === "morning"; // Default to morning if no timestamp
-    
-    const emailDate = new Date(email.receivedAt);
-    const hours = emailDate.getHours();
-    
-    if (timeOfDay === "morning") {
-      return hours >= 5 && hours < 12; // 5 AM to 12 PM
-    } else {
-      return hours >= 12 || hours < 5; // 12 PM to 5 AM
-    }
-  });
-};
 
   // Basic loading checks
   if (isLoadingUser || isLoadingAccounts) {
@@ -423,40 +426,8 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
     return null;
   }
 
-  // Only show the connect card if there's no active account AND no digest data
-  if (!activeAccount && !digestData) {
-    return (
-      <div className="container max-w-3xl mx-auto px-4">
-        <Card className="shadow-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <Mail className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-xl font-semibold">Integrate Gmail</h2>
-            </div>
-            <p className="text-muted-foreground mb-4">
-              Link your Gmail account to enhance your email management efficiency.
-            </p>
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                onTabChange?.("settings");
-                setLocation('/settings');
-              }}
-            >
-              <Mail className="h-4 w-4" />
-              Link Gmail Account
-              {/* Establish Gmail Connection */}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
-
-  // Show loading state
-  if (isLoadingState) {
+  // Show loading state only for initial load
+  if (isLoadingState && !digestData) {
     return (
       <div className="container max-w-3xl mx-auto px-4">
         <Card className="shadow-sm">
@@ -605,18 +576,24 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
 
       <div className="space-y-6">
       {CATEGORY_ORDER.map((categoryName) => {
+          if (!categoryName) {
+            console.error('Invalid category name in CATEGORY_ORDER');
+            return null;
+          }
+
           // Find category in digest data
           const digestCategory = digestData?.categories?.find(
-            c => c.category === categoryName
+            c => c.category?.toLowerCase() === categoryName?.toLowerCase()
           );
+          
           // Use digest category or create an empty fallback
           const category = digestCategory || {
             category: categoryName,
-            emails: [],
-            summary: `No ${categoryName.toLowerCase()} emails`
+            summaries: [],
+            summary: `No ${categoryName} emails`
           };
 
-          const config = CATEGORY_CONFIG[category.category];
+          const config = CATEGORY_CONFIG[category.category] || CATEGORY_CONFIG["Important Info"];
           const Icon = config?.icon || Mail;
           return (
             <Card key={category.category} className={cn("shadow-sm bg-gradient-to-br", category.category === "Alerts" ? "mb-6" : "", config?.gradientClass)}>
@@ -630,7 +607,7 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                       <Icon className="h-5 w-5 text-muted-foreground" />
                       <CardTitle className="text-lg">{category.category}</CardTitle>
                       <Badge variant="secondary" className="ml-2">
-                        {category.emails.length} {category.emails.length === 1 ? 'email' : 'emails'}
+                        {category.summaries.length} {category.summaries.length === 1 ? 'summary' : 'summaries'}
                       </Badge>
                     </div>
                     {expandedCategories[category.category] ?
@@ -642,22 +619,22 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
 
                 <CardContent className="pt-0">
                   <CollapsibleContent className="space-y-4">
-                    {category.emails.map((email: EmailSummary, idx: number) => (
+                    {category.summaries.map((summary: EmailSummary, idx: number) => (
                       <Collapsible
                         key={idx}
-                        open={expandedEmails[email.gmail_id] || false}
-                        onOpenChange={() => toggleEmail(email.gmail_id)}
+                        open={expandedEmails[summary.gmail_id] || false}
+                        onOpenChange={() => toggleEmail(summary.gmail_id)}
                       >
                         <div className="p-4 rounded-lg border bg-background/50">
                           <CollapsibleTrigger className="w-full">
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-2">
                                 <h3 className="font-semibold text-base tracking-tight text-left">
-                                  {email.subject}
+                                  {summary.subject}
                                 </h3>
                                 {(() => {
                                   // Use let instead of const to allow reassignment
-                                  let score = email.priority_score || 50;
+                                  let score = summary.priority_score || 50;
 
                                   // Always set Notifications to low priority
                                   if (category.category === "Notifications") {
@@ -682,11 +659,11 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm text-muted-foreground whitespace-nowrap">
-                                  {email.receivedAt 
-                                    ? format(new Date(email.receivedAt), "MMM d, yyyy") 
+                                  {summary.receivedAt 
+                                    ? format(new Date(summary.receivedAt), "MMM d, yyyy") 
                                     : format(new Date(), "MMM d, yyyy")}
                                 </span>
-                                {expandedEmails[email.gmail_id] ? 
+                                {expandedEmails[summary.gmail_id] ? 
                                   <ChevronUp className="h-4 w-4" /> : 
                                   <ChevronDown className="h-4 w-4" />
                                 }
@@ -702,23 +679,23 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                                   <h4 className="text-sm font-bold text-primary/90">Summary</h4>
                                 </div>
                                 <div className="px-4 py-3 bg-background/80">
-                                  <p className="text-sm leading-relaxed text-foreground/90">{email.headline}</p>
+                                  <p className="text-sm leading-relaxed text-foreground/90">{summary.headline}</p>
                                 </div>
                               </div>
 
                               {/* Insights Section */}
-                              {email.insights && (
+                              {summary.insights && (
                                 <div className="rounded-md overflow-hidden border border-primary/10">
                                   <div className="bg-primary/5 px-4 py-2 flex items-center gap-2 border-b border-primary/10">
                                     <h4 className="text-sm font-bold text-primary/90">Insights</h4>
                                   </div>
                                   <div className="px-4 py-3 bg-background/80 space-y-3">
                                     {/* Key Highlights */}
-                                    {email.insights.key_highlights && email.insights.key_highlights.length > 0 && (
+                                    {summary.insights.key_highlights && summary.insights.key_highlights.length > 0 && (
                                       <div>
                                         <h5 className="text-sm font-semibold mb-1">Key Highlights:</h5>
                                         <ul className="list-disc pl-5 space-y-1">
-                                          {email.insights.key_highlights.map((highlight, i) => (
+                                          {summary.insights.key_highlights.map((highlight, i) => (
                                             <li key={i} className="text-sm text-foreground/90">{highlight}</li>
                                           ))}
                                         </ul>
@@ -726,19 +703,19 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                                     )}
                                     
                                     {/* Why This Matters */}
-                                    {email.insights.why_this_matters && (
+                                    {summary.insights.why_this_matters && (
                                       <div>
                                         <h5 className="text-sm font-semibold mb-1">Why This Matters:</h5>
-                                        <p className="text-sm text-foreground/90">{email.insights.why_this_matters}</p>
+                                        <p className="text-sm text-foreground/90">{summary.insights.why_this_matters}</p>
                                       </div>
                                     )}
                                     
                                     {/* Next Steps */}
-                                    {email.insights.next_step && email.insights.next_step.length > 0 && (
+                                    {summary.insights.next_step && summary.insights.next_step.length > 0 && (
                                       <div>
                                         <h5 className="text-sm font-semibold mb-1">Next Steps:</h5>
                                         <ul className="list-disc pl-5 space-y-1">
-                                          {email.insights.next_step.map((step, i) => (
+                                          {summary.insights.next_step.map((step, i) => (
                                             <li key={i} className="text-sm text-foreground/90">
                                               {renderLinkText(step)}  
                                             </li>
@@ -755,7 +732,7 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                                   variant="outline"
                                   size="sm"
                                   className="gap-2"
-                                  onClick={() => handleViewEmail(email.gmail_id, category.category)}
+                                  onClick={() => handleViewEmail(summary.gmail_id, category.category)}
                                 >
                                   <Mail className="h-4 w-4" />
                                   {category.category === "Calendar" ? "View Calendar event" :
@@ -770,52 +747,16 @@ const filterEmailsByTimeOfDay = (emails: EmailSummary[]) => {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="gap-2 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border-red-200"
+                                      className="bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border-red-200"
                                       onClick={() => {
                                         // Open Gmail unsubscribe page in a new tab
-                                        window.open(`https://mail.google.com/mail/u/0/#inbox/${email.gmail_id}?unsubscribe=1`, '_blank');
+                                        window.open(`https://mail.google.com/mail/u/0/#inbox/${summary.gmail_id}?unsubscribe=1`, '_blank');
                                       }}
                                     >
                                       <Wand2 className="h-4 w-4" />
                                       Unsubscribe
                                     </Button>
                                   )}
-
-                                {category.category === "Important Info" && !acknowledgedEmails.has(email.gmail_id) && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-2"
-                                    onClick={() => handleAcknowledge(email.gmail_id)}
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    Acknowledge
-                                  </Button>
-                                )}
-
-                                {category.category === "Important Info" && acknowledgedEmails.has(email.gmail_id) && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-2 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 border-green-200"
-                                    disabled
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    Acknowledged
-                                  </Button>
-                                )}
-
-                                {category.category === "Actions" && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-2 bg-green-50 text-green-700 hover:bg-green-100 hover:text-green-800 border-green-200"
-                                    disabled={true}
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    {email.is_processed ? "Added to Action Items" : "Add to Action Items"}
-                                  </Button>
-                                )}
                               </div>
                             </div>
                           </CollapsibleContent>
