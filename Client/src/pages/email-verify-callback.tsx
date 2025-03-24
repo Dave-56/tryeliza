@@ -20,18 +20,25 @@ export default function AuthCallback() {
         if (sessionError) throw sessionError;
 
         if (session?.user?.email_confirmed_at) {
-          // Get user's actual timezone
-          const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          // Get timezone from identity_data or fallback to browser timezone
+          const userTimezone = session.user.identities?.[0]?.identity_data?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+          
+          console.log('Debug - User data:', {
+            metadata: session.user.user_metadata,
+            identityData: session.user.identities?.[0]?.identity_data,
+            timezone: userTimezone,
+            rawUser: session.user
+          });
           
           // First check if user profile already exists
           const { data: existingUser } = await supabase
             .from('users')
-            .select('id')
+            .select('id, timezone')
             .eq('id', session.user.id)
             .single();
 
-          // Only create/update if user doesn't exist
           if (!existingUser) {
+            // Create new user profile
             const { error: profileError } = await supabase
               .from('users')
               .insert({
@@ -48,6 +55,16 @@ export default function AuthCallback() {
               console.error('Error creating user profile:', profileError);
               setError("I couldn't complete your profile setup. Please contact support.");
               return;
+            }
+          } else if (existingUser.timezone === 'UTC' && userTimezone !== 'UTC') {
+            // Update timezone if it's still UTC and we have a non-UTC value
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ timezone: userTimezone })
+              .eq('id', session.user.id);
+
+            if (updateError) {
+              console.error('Error updating timezone:', updateError);
             }
           }
 

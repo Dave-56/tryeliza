@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState, ReactNode } from 'react';
+import { useEffect, useState, useMemo, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Collapsible,
@@ -19,38 +19,45 @@ import { useEmailDigest, useTriggerSummary, formatUTCToLocal } from "@/hooks/use
 import { CATEGORY_ORDER, CATEGORY_CONFIG } from "@/constants/email-categories";
 import { 
   EmailSummary, 
-  CategorySummary, 
-  EmailDigestResponse 
 } from '../types/email-digest';
 
-function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDateSelect }: { 
+function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDateSelect, now }: { 
   lastUpdated?: string, 
   refetch: () => void, 
   isFetching: boolean,
   selectedDate: Date | null,
-  onDateSelect: (date: Date | null) => void
+  onDateSelect: (date: Date | null) => void,
+  now: Date
 }) {
-  const now = new Date();
+  console.log('DEBUG - now:', format(now, 'yyyy-MM-dd HH:mm:ss'));
+  console.log('DEBUG - selectedDate:', selectedDate ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss') : 'null');
+  
   // Negative offset means going back in time (previous weeks)
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week, etc.
   
   // Calculate the start of the displayed week based on the offset
   const currentWeekStart = startOfWeek(now);
+  console.log('DEBUG - currentWeekStart:', format(currentWeekStart, 'yyyy-MM-dd HH:mm:ss'));
+  
   // For negative offsets (past weeks), use subWeeks
   const displayedWeekStart = weekOffset < 0 
     ? subWeeks(currentWeekStart, Math.abs(weekOffset)) 
     : currentWeekStart;
   
-  const days = Array.from({ length: 7 }, (_, i) => ({
-    date: addDays(displayedWeekStart, i),
-    dayName: format(addDays(displayedWeekStart, i), 'EEE'),
-    dayNum: format(addDays(displayedWeekStart, i), 'd'),
-    isPast: addDays(displayedWeekStart, i) <= now // Include today as "past" for clickability
-  }));
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(displayedWeekStart, i);
+    const isPast = startOfDay(date) < now;
+    return {
+      date,
+      dayName: format(date, 'EEE'),
+      dayNum: format(date, 'd'),
+      isPast: startOfDay(date) < now
+    };
+  });
 
   const handleDateClick = (date: Date) => {
     // Allow clicking on past dates and today's date
-    if (date <= now) {
+    if (startOfDay(date) <= now) {
       console.log(`Clicked on date: ${format(date, 'yyyy-MM-dd')}`);
       
       // If the same date is clicked again, deselect it
@@ -58,9 +65,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
         onDateSelect(null);
       } else {
         // Otherwise, select the new date
-        onDateSelect(date);
-        // The useEmailDigest hook will automatically refetch when selectedDate changes
-        // due to the useEffect dependency on selectedDate in the EmailDigest component
+        onDateSelect(startOfDay(date));
       }
     }
   };
@@ -115,21 +120,20 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
   // automatically navigate to the week containing that date
   useEffect(() => {
     if (selectedDate && !isSelectedDateInCurrentWeek) {
-      // Calculate how many weeks back we need to go
+      // Only auto-navigate when the selected date changes, not during manual navigation
       const selectedWeekStart = startOfWeek(selectedDate);
       const currentWeekStart = startOfWeek(now);
       const weekDiff = differenceInWeeks(currentWeekStart, selectedWeekStart);
       
-      if (weekDiff >= 0) {
-        // Only navigate if the selected date is in the past or present
+      // Add a check to prevent override during manual navigation
+      if (weekDiff >= 0 && weekOffset === 0) {  // Only adjust if we're at the current week
         setWeekOffset(-weekDiff);
-      } else {
-        // If somehow we got a future date, reset to current week
+      } else if (weekDiff < 0) {
         setWeekOffset(0);
         onDateSelect(null);
       }
     }
-  }, [selectedDate, isSelectedDateInCurrentWeek, now]);
+  }, [selectedDate]); // Remove isSelectedDateInCurrentWeek and now from dependencies
 
   return (
     <div className="mt-2 mb-6 relative">
@@ -138,7 +142,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
           <div className="flex justify-between items-center mb-2">
             <div className="text-sm text-muted-foreground">
               <span className="ml-2 text-primary font-medium">
-                Viewing: {format(selectedDate || now, 'MMM d, yyyy')}
+                Viewing: {format(startOfDay(selectedDate || now), 'MMM d, yyyy')}
                 {!selectedDate}
               </span>
             </div>
@@ -198,10 +202,9 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                 key={day.date.toISOString()}
                 className={cn(
                   "flex flex-col items-center justify-center p-2 rounded-lg",
-                  // Use isSameDay for more accurate date comparison
                   selectedDate 
-                    ? (isSameDay(selectedDate, day.date) ? "bg-black text-white" : "")
-                    : (isToday(day.date) ? "bg-black text-white" : ""),
+                    ? (isSameDay(startOfDay(selectedDate), startOfDay(day.date)) ? "bg-black text-white" : "")
+                    : (isSameDay(startOfDay(now), startOfDay(day.date)) ? "bg-black text-white" : ""),
                   day.isPast && "cursor-pointer hover:bg-muted"
                 )}
                 onClick={() => handleDateClick(day.date)}
@@ -258,6 +261,8 @@ function useScheduledRefetch() {
  
   
 export function EmailDigest({ onTabChange }: EmailDigestProps) {
+  const now = useMemo(() => startOfDay(new Date()), []);
+  
   // Utility function to parse and render links in the format "descriptive text||url"
   const renderLinkText = (text: string): ReactNode => {
     if (text.includes('||')) {
@@ -302,25 +307,16 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   
   // Initialize selectedDate from URL parameter if it exists, otherwise use today
   const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
-    // Get today's date in user's timezone
-    const today = startOfDay(new Date());
-    console.log('Today:', today);
-    
-    // If no date param, use today
-    if (!dateParam) {
-      params.set('date', format(today, 'yyyy-MM-dd'));
-      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-      return today;
+    // Initialize from URL params
+    const params = new URLSearchParams(window.location.search);
+    const dateParam = params.get('date');
+    if (dateParam) {
+      const parsedDate = startOfDay(parseISO(`${dateParam}T00:00:00`));
+      if (!isNaN(parsedDate.getTime()) && parsedDate <= now) {
+        return parsedDate;
+      }
     }
-    
-    // Parse the date param
-    const parsedDate = parseISO(dateParam);
-    if (isNaN(parsedDate.getTime()) || parsedDate > today) {
-      params.set('date', format(today, 'yyyy-MM-dd'));
-      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-      return today;
-    }
-    return startOfDay(parsedDate);
+    return null;
   });
   
   const [timeOfDay, setTimeOfDay] = useState<"morning" | "evening">(() => {
@@ -404,26 +400,10 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
     }
   }, [digestData]);
 
-  // Initialize data on mount and handle URL parameters
-  useEffect(() => {
-    // Get date from URL on mount
-    const params = new URLSearchParams(window.location.search);
-    const dateParam = params.get('date');
-    
-    if (dateParam) {
-      const parsedDate = new Date(dateParam);
-      // Check if the date is valid and not in the future
-      if (!isNaN(parsedDate.getTime()) && parsedDate <= new Date()) {
-        // Only set the date if it's different from current selectedDate
-        if (!selectedDate || format(selectedDate, 'yyyy-MM-dd') !== format(parsedDate, 'yyyy-MM-dd')) {
-          setSelectedDate(parsedDate);
-        }
-      }
-    }
-  }, []); // Only run on mount
-
   // Handle data fetching when parameters change
   useEffect(() => {
+    console.log('DEBUG - useEffect - selectedDate:', selectedDate ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss') : 'null');
+    console.log('DEBUG - useEffect - timeOfDay:', timeOfDay);
     if (selectedDate || timeOfDay) {
       refetch();
     }
@@ -595,6 +575,7 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
           isFetching={isGenerating} 
           selectedDate={selectedDate} 
           onDateSelect={handleDateSelect} 
+          now={now}
         />
       </div>
 
@@ -713,7 +694,7 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
                                 <span className="text-sm text-muted-foreground whitespace-nowrap">
                                   {summary.receivedAt 
                                     ? format(new Date(summary.receivedAt), "MMM d, yyyy") 
-                                    : format(new Date(), "MMM d, yyyy")}
+                                    : format(now, "MMM d, yyyy")}
                                 </span>
                                 {expandedEmails[summary.gmail_id] ? 
                                   <ChevronUp className="h-4 w-4" /> : 

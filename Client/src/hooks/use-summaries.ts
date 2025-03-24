@@ -72,28 +72,18 @@ export function formatUTCToLocal(utcDateString: string): string {
 export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?: Date | null) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: emailAccounts } = useEmailAccounts();
-  const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive);
+  const { data: emailAccounts, isLoading: isLoadingEmailAccounts } = useEmailAccounts();
+  const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive) ?? false;
 
   return useQuery<BackendResponse<DailySummaryResponse>, Error, EmailDigestResponse>({
     queryKey: ['email-digest', period, date ? format(date, 'yyyy-MM-dd') : undefined],
     queryFn: async () => {
-      if (!apiClient.isAuthenticated()) {
-        throw new Error('User not authenticated');
-      }
-
-      if (!isGmailConnected) {
-        // Instead of throwing an error, return a valid response structure
-        return {
-          isSuccess: true,
-          data: {
-            categoriesSummary: [],
-            lastUpdated: new Date().toISOString(),
-            currentServerTime: new Date().toISOString()
-          },
-          error: null
-        };
-      }
+      console.log('Executing query with params:', {
+        url: `/api/daily-summaries?period=${period}${date ? `&date=${format(date, 'yyyy-MM-dd')}` : ''}`,
+        emailAccounts,
+        isGmailConnected,
+        isLoadingEmailAccounts
+      });
       
       let url = `/api/daily-summaries?period=${period}`;
       
@@ -110,7 +100,7 @@ export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?:
     staleTime: 1000 * 60 * 5, // Data stays fresh for 5 minutes
     refetchInterval: false,
     retry: 3, // More retries for better reliability
-    enabled: Boolean(apiClient.isAuthenticated()),
+    enabled: !isLoadingEmailAccounts,
     refetchOnMount: true, // Always refetch when component mounts
     refetchOnWindowFocus: true, // Refetch when window regains focus
     refetchOnReconnect: true // Refetch on network reconnection
@@ -195,10 +185,6 @@ function transformDailySummaryToDigest(response: BackendResponse<DailySummaryRes
         lastUpdated: response.data?.lastUpdated || new Date().toISOString()
       };
     }
-  
-    console.log('Raw lastUpdated from response:', response.data?.lastUpdated);
-    console.log('Current server time from response:', response.data?.currentServerTime);
-    console.log('Full response data:', JSON.stringify(response.data));
     
     // Only format lastUpdated for UI display
     const lastUpdatedTime = response.data?.lastUpdated;
@@ -249,7 +235,5 @@ function transformDailySummaryToDigest(response: BackendResponse<DailySummaryRes
         : `FIXED_DATE_VALUE||${lastUpdatedTime}||${formattedLastUpdated}`,
       currentServerTime: response.data?.currentServerTime
     };
-    
-    console.log('Final transformed result:', JSON.stringify(result));
     return result;
   }

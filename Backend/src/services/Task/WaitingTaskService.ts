@@ -187,52 +187,6 @@ export class WaitingTaskService {
                                 })
                                 .where(eq(waitingTasks.task_id, task.id));
                             
-                            //Try to create the draft in Gmail if user has connected their account
-                            // try {
-                            //     // Get the user's email account credentials
-                            //     const emailAccount = await this.database.query.emailAccounts.findFirst({
-                            //         where: and(
-                            //             eq(emailAccounts.user_id, task.user_id),
-                            //             eq(emailAccounts.is_connected, true)
-                            //         )
-                            //     });
-                                
-                            //     if (emailAccount && emailAccount.tokens) {
-                            //         const { access_token, refresh_token } = emailAccount.tokens;
-                                    
-                            //         if (access_token && refresh_token) {
-                            //             // Create a draft in Gmail
-                            //             const draftActions = new DraftActions(
-                            //                 access_token, 
-                            //                 refresh_token,
-                            //                 emailAccount.id.toString()
-                            //             );
-                                        
-                            //             // await draftActions.createDraft(
-                            //             //     {
-                            //             //         subject: draft.subject,
-                            //             //         body: draft.body,
-                            //             //         to: draft.to,
-                            //             //         cc: draft.cc
-                            //             //     },
-                            //             //     task.thread_id
-                            //             // );
-                                        
-                            //             // // Update the follow-up email status to indicate it was created in Gmail
-                            //             // if (followUpEmail[0]) {
-                            //             //     await this.database.update(followUpEmails)
-                            //             //         .set({ status: 'created_in_gmail' })
-                            //             //         .where(eq(followUpEmails.id, followUpEmail[0].id));
-                            //             // }
-                                        
-                            //             console.log(`Created draft for task ${task.id}`);
-                            //         }
-                            //     }
-                            // } catch (error) {
-                            //     console.error('Error creating draft:', error);
-                            //     // The draft is still saved in our database, so we can continue
-                            // }
-                            
                             return true;
                         }
                     }
@@ -250,7 +204,7 @@ export class WaitingTaskService {
                         .where(eq(tasks.id, task.id));
                 }
                 return true;
-                
+
             case 'continue_waiting':
                 // No action needed
                 return true;

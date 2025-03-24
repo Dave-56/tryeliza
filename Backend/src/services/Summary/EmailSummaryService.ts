@@ -1,6 +1,7 @@
 // EmailSummaryService.ts
 import { db } from '../../db/index.js';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { CategorySummary } from './types'
 import { users, EmailAccount, emailAccounts, dailySummaries, emails, processedEmails, tasks, DailySummary } from '../../db/schema.js';
 import { EmailProcessingService } from '../Email/EmailProcessingService';
 import { SummarizationResponse, EmailThread, EmailMessage } from '../../Types/model.js';
@@ -288,16 +289,11 @@ export class EmailSummaryService {
   
   private async storeSummary(tx: any, userId: string, period: 'morning' | 'evening', summary: SummarizationResponse) {
     // Get user's timezone or default to system timezone
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userTimezone = await this.getUserTimezone(tx, userId);
     
     // Create date string in the user's timezone using en-CA locale for YYYY-MM-DD format
     const now = new Date();
-    const summaryDateStr = new Intl.DateTimeFormat('en-CA', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      timeZone: userTimezone
-    }).format(now);
+    const summaryDateStr = this.formatDateInTimezone(now, userTimezone);
     
     console.log(`Creating summary with date ${summaryDateStr} using timezone ${userTimezone}`);
     
@@ -307,52 +303,101 @@ export class EmailSummaryService {
       generatedAt: summary.generatedAt || now
     };
     
-    // Calculate email count from categories
-    const emailCount = sanitizedSummary.categories?.reduce((count, category) => 
-      count + (category.summaries?.length || 0), 0) || 0;
-    
     // Check if a summary already exists for this user, date, and period
-    const existingSummary = await tx.query.dailySummaries.findFirst({
-      where: and(
-        eq(dailySummaries.user_id, userId),
-        eq(dailySummaries.summary_date, summaryDateStr),
-        eq(dailySummaries.period, period)
-      )
-    });
+    const existingSummary = await this.findExistingSummary(tx, userId, summaryDateStr, period);
     
     if (existingSummary) {
       console.log(`Updating existing summary for user ${userId}, date ${summaryDateStr}, period ${period}`);
       
-      // Update the existing summary
-      await tx.update(dailySummaries)
-        .set({
-          last_run_at: now,
-          email_count: emailCount,
-          [dailySummaries.categories_summary.name]: sanitizedSummary.categories || [],
-          [dailySummaries.status.name]: 'completed',
-          updated_at: now
-        })
-        .where(and(
-          eq(dailySummaries.user_id, userId),
-          eq(dailySummaries.summary_date, summaryDateStr),
-          eq(dailySummaries.period, period)
-        ));
+    // Merge existing and new summaries
+    const mergedCategories = await this.mergeSummaries(
+      existingSummary.categories_summary || [],
+      sanitizedSummary.categories || []
+    );
+    
+    // Calculate email count from merged categories
+    const emailCount = this.calculateEmailCount(mergedCategories);
+    
+    // Update with merged data
+    await tx.update(dailySummaries)
+      .set({
+        last_run_at: now,
+        email_count: emailCount,
+        [dailySummaries.categories_summary.name]: mergedCategories,
+        [dailySummaries.status.name]: 'completed',
+        updated_at: now,
+        timezone: userTimezone
+      })
+      .where(and(
+        eq(dailySummaries.user_id, userId),
+        eq(dailySummaries.summary_date, summaryDateStr),
+        eq(dailySummaries.period, period)
+      ));
     } else {
       console.log(`Creating new summary for user ${userId}, date ${summaryDateStr}, period ${period}`);
       
+      const categories = sanitizedSummary.categories || [];
+      
       // Insert a new summary
       await tx.insert(dailySummaries).values({
-        user_id: userId,
-        summary_date: summaryDateStr,
-        period: period,
-        scheduled_time: period === 'morning' ? '07:00:00' : '16:00:00',
-        last_run_at: now,
-        email_count: emailCount,
-        [dailySummaries.categories_summary.name]: sanitizedSummary.categories || [],
+        [dailySummaries.user_id.name]: userId,
+        [dailySummaries.summary_date.name]: summaryDateStr,
+        [dailySummaries.period.name]: period,
+        [dailySummaries.scheduled_time.name]: period === 'morning' ? '07:00:00' : '16:00:00',
+        [dailySummaries.last_run_at.name]: now,
+        [dailySummaries.email_count.name]: this.calculateEmailCount(categories),
+        [dailySummaries.categories_summary.name]: categories,
         [dailySummaries.status.name]: 'completed',
-        timezone: userTimezone
+        [dailySummaries.timezone.name]: userTimezone
       });
     }
+  }
+
+  private calculateEmailCount(categories: CategorySummary[]): number {
+    return categories.reduce((count, category) => 
+      count + (category.summaries?.length || 0), 0);
+  }
+
+  private async mergeSummaries(existing: CategorySummary[], newData: CategorySummary[]): Promise<CategorySummary[]> {
+    // Create a merged summary by combining categories
+    const mergedSummary = {};
+    
+    // First, add all existing categories
+    for (const category of existing) {
+      mergedSummary[category.category] = category.summaries || [];
+    }
+    
+    // Then, add new summaries, avoiding duplicates by message ID
+    for (const category of newData) {
+      if (!mergedSummary[category.category]) {
+        mergedSummary[category.category] = [];
+      }
+      
+      // Add only new items that don't exist in the current category
+      for (const item of category.summaries) {
+        const isDuplicate = mergedSummary[category.category].some(
+          existing => existing.gmail_id === item.gmail_id
+        );
+        
+        if (!isDuplicate) {
+          mergedSummary[category.category].push(item);
+        }
+      }
+    }
+    
+    // Sort items in each category by priority_score
+    for (const category in mergedSummary) {
+      if (mergedSummary[category].length > 0) {
+        mergedSummary[category].sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0));
+      }
+    }
+    
+    // Convert back to array format
+    return Object.keys(mergedSummary).map(category => ({
+      category,
+      count: mergedSummary[category].length,
+      summaries: mergedSummary[category]
+    }));
   }
 
   /**
@@ -388,18 +433,13 @@ export class EmailSummaryService {
 
       // Prepare the data for categories summary
       // Get the user's timezone or default to system timezone
-      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const userTimezone = await this.getUserTimezone(db, userId);
       
       // Create a date object in the user's timezone
       const now = new Date();
       
       // Format the date as YYYY-MM-DD in the user's timezone
-      const today = new Intl.DateTimeFormat('en-CA', { // en-CA uses YYYY-MM-DD format
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        timeZone: userTimezone
-      }).format(now).replace(/\//g, '-'); // Replace / with - to ensure YYYY-MM-DD format
+      const today = this.formatDateInTimezone(now, userTimezone);
       
       // Determine the period - use provided period if available, otherwise calculate based on time
       let period: 'morning' | 'evening';
@@ -494,66 +534,25 @@ export class EmailSummaryService {
       console.log('Categories after processing:', categoriesSummaryData.map(c => c.category));
 
       // Check if a summary already exists for today
-      const existingSummary = await db.query.dailySummaries.findFirst({
-        where: and(
-          eq(dailySummaries.user_id, userId),
-          eq(dailySummaries.summary_date, today),
-          eq(dailySummaries.period, period)
-        )
-      });
+      const existingSummary = await this.findExistingSummary(db, userId, today, period);
 
       if(existingSummary) {
           console.log('Existing summary categories:', existingSummary.categories_summary && Array.isArray(existingSummary.categories_summary) 
             ? existingSummary.categories_summary.map(c => c.category) 
             : 'No existing categories');
-          // Merge with existing summary data
-          const existingData = existingSummary.categories_summary as any;
-          
-          // Create a merged summary by combining categories
-          const mergedSummary = {};
-          
-          // First, add all existing categories
-          for (const category of existingData) {
-            mergedSummary[category.category] = category.summaries || [];
-          }
-          
-          // Then, add new summaries, avoiding duplicates by message ID
-          for (const category of categoriesSummaryData) {
-            if (!mergedSummary[category.category]) {
-              mergedSummary[category.category] = [];
-            }
-            
-            // Add only new items that don't exist in the current category
-            for (const item of category.summaries) {
-              const isDuplicate = mergedSummary[category.category].some(
-                existing => existing.gmail_id === item.gmail_id
-              );
-              
-              if (!isDuplicate) {
-                mergedSummary[category.category].push(item);
-              }
-            }
-          }
-          
-          // Sort items in each category by priority_score
-          for (const category in mergedSummary) {
-            if (mergedSummary[category].length > 0) {
-              mergedSummary[category].sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0));
-            }
-          }
-          
-          // Convert back to array format
-          const mergedCategoriesSummary = Object.keys(mergedSummary).map(category => ({
-            category,
-            count: mergedSummary[category].length,
-            summaries: mergedSummary[category]
-          }));
 
-          console.log('Categories after merging:', mergedCategoriesSummary.map(c => c.category));
+          // Merge with existing summary data
+          const mergedCategories = await this.mergeSummaries(
+            existingSummary.categories_summary || [],
+            categoriesSummaryData
+          );
+
+          console.log('Categories after merging:', mergedCategories.map(c => c.category));
+          
           // Update the existing summary with merged data
           await db.update(dailySummaries)
           .set({
-              [dailySummaries.categories_summary.name]: mergedCategoriesSummary,
+              [dailySummaries.categories_summary.name]: mergedCategories,
               [dailySummaries.status.name]: 'completed',
               [dailySummaries.updated_at.name]: new Date() 
           })
@@ -570,9 +569,9 @@ export class EmailSummaryService {
               user_id: userId,
               summary_date: today,
               period,
-              [dailySummaries.categories_summary.name]: categoriesSummaryData,
-              [dailySummaries.status.name]: 'completed',
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            [dailySummaries.categories_summary.name]: categoriesSummaryData,
+            [dailySummaries.status.name]: 'completed',
+              timezone: userTimezone,
               cache_duration_hours: 4 // Cache for 4 hours by default
           })
           .onConflictDoUpdate({
@@ -602,39 +601,66 @@ export class EmailSummaryService {
    */
 
   async getLatestDailySummary(userId: string): Promise<DailySummary | null> {
-    // Get the latest non-expired summary for the user
-    const latestSummary = await db.query.dailySummaries.findFirst({
-    where: and(
-        eq(dailySummaries.user_id, userId),
-        eq(dailySummaries.status, 'completed')
-    ),
-    orderBy: [desc(dailySummaries.created_at)],
-    with: {
-        user: true
-    }
+      // Get the latest non-expired summary for the user
+      const latestSummary = await db.query.dailySummaries.findFirst({
+      where: and(
+          eq(dailySummaries.user_id, userId),
+          eq(dailySummaries.status, 'completed')
+      ),
+      orderBy: [desc(dailySummaries.created_at)],
+      with: {
+          user: true
+      }
+      });
+
+      if (!latestSummary) {
+      return null;
+      }
+
+      // Check if summary is expired
+      if (!latestSummary.created_at) {
+          return null;
+      }
+      
+      const createdAt = new Date(latestSummary.created_at);
+      // Use default of 24 hours if cache_duration_hours is null
+      const cacheDuration = latestSummary.cache_duration_hours ?? 24;
+      const expiryTime = new Date(createdAt.getTime() + (cacheDuration * 60 * 60 * 1000));
+      const now = new Date();
+      
+      if (now > expiryTime) {
+          return null;
+      }
+
+      return latestSummary;
+  }
+
+  private async getUserTimezone(tx: any, userId: string): Promise<string> {
+    const user = await tx.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { timezone: true }
     });
+    return user?.timezone || 'UTC';
+  }
 
-    if (!latestSummary) {
-    return null;
-    }
+  private formatDateInTimezone(date: Date, timezone: string): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: timezone
+    }).format(date);
+  }
 
-    // Check if summary is expired
-    if (!latestSummary.created_at) {
-        return null;
-    }
-    
-    const createdAt = new Date(latestSummary.created_at);
-    // Use default of 24 hours if cache_duration_hours is null
-    const cacheDuration = latestSummary.cache_duration_hours ?? 24;
-    const expiryTime = new Date(createdAt.getTime() + (cacheDuration * 60 * 60 * 1000));
-    const now = new Date();
-    
-    if (now > expiryTime) {
-        return null;
-    }
-
-    return latestSummary;
-}
+  private async findExistingSummary(tx: any, userId: string, date: string, period: string) {
+    return tx.query.dailySummaries.findFirst({
+      where: and(
+        eq(dailySummaries.user_id, userId),
+        eq(dailySummaries.summary_date, date),
+        eq(dailySummaries.period, period)
+      )
+    });
+  }
 
 // Add to EmailSync.ts
 // async syncOutlookEmails(userId: string, accountId: number) {
@@ -654,5 +680,4 @@ export class EmailSummaryService {
     
 //     // Process and store emails similar to Google implementation
 // }
-
 }
