@@ -19,7 +19,7 @@ export default function VerifyEmail() {
           </div>
           <CardTitle>Check Your Email</CardTitle>
           <CardDescription>
-            I've sent you a verification link. Please check your inbox to verify your account.
+            To start using Eliza AI, please verify your account by clicking the link in the email.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

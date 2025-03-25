@@ -24,16 +24,13 @@ export const signUp = async (email: string, password: string, name: string) => {
   // Get user's timezone
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  // Determine the redirect URL based on environment
-  const redirectUrl = import.meta.env.DEV 
-    ? 'http://localhost:3001/email-verify-callback'
-    : 'https://app.tryeliza.ai/email-verify-callback';
+  // Use VITE_APP_URL for the redirect URL, fallback to localhost for development
+  const redirectUrl = `${import.meta.env.VITE_APP_URL || 'http://localhost:3001'}/email-verify-callback`;
 
   console.log('Signing up user with:', { 
     email, 
     redirectUrl,
-    timezone,
-    isDev: import.meta.env.DEV 
+    timezone
   });
 
   try {
