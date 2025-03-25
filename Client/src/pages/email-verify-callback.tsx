@@ -16,19 +16,20 @@ export default function AuthCallback() {
       try {
         // Get the session to check if email is verified
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        console.log('Debug - Full Session:', {
+          session,
+          user: session?.user,
+          email_confirmed: session?.user?.email_confirmed_at,
+          identities: session?.user?.identities,
+          metadata: session?.user?.user_metadata
+        });
         
         if (sessionError) throw sessionError;
 
         if (session?.user?.email_confirmed_at) {
           // Get timezone from identity_data or fallback to browser timezone
-          const userTimezone = session.user.identities?.[0]?.identity_data?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-          
-          console.log('Debug - User data:', {
-            metadata: session.user.user_metadata,
-            identityData: session.user.identities?.[0]?.identity_data,
-            timezone: userTimezone,
-            rawUser: session.user
-          });
+          const userTimezone = session?.user?.identities?.[0]?.identity_data?.timezone || session?.user?.user_metadata?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
           
           // First check if user profile already exists
           const { data: existingUser } = await supabase

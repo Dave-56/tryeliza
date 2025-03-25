@@ -137,12 +137,19 @@ export function useUser() {
       } 
     },
     onSuccess: () => {
-      console.log('Logout successful');
-      queryClient.clear();
-      setLocation('/login');
+      // Only invalidate user-related queries instead of clearing everything
+      queryClient.removeQueries({ queryKey: ['user'] });
+      // Use replace to prevent back navigation to authenticated routes
+      window.location.replace('/login');
     },
     onError: (error) => {
       console.error('Logout error:', error.message);
+      const { toast } = useToast();
+      toast({
+        variant: "destructive",
+        title: "Logout Failed",
+        description: "Please try again"
+      });
     }
   });
 

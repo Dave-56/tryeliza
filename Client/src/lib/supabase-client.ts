@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { useToast } from "@/hooks/use-toast";
+import { useGmailIntegration } from "@/hooks/use-email";
 
 // Initialize the Supabase client
 export const supabase = createClient(
@@ -74,7 +76,21 @@ export const signUp = async (email: string, password: string, name: string) => {
 };
 
 export const signOut = async () => {
-  return await supabase.auth.signOut();
+  // Clear all local storage items set by Supabase
+  const keys = ['supabase.auth.token', 'supabase.auth.refreshToken'];
+  keys.forEach(key => localStorage.removeItem(key));
+  
+  // Sign out from Supabase
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+  
+  // Create a new Supabase client to ensure clean state
+  const { createClient } = await import('@supabase/supabase-js');
+  const newClient = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+  );
+  Object.assign(supabase, newClient);
 };
 
 // Function to delete user account
@@ -87,8 +103,9 @@ export const deleteAccount = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Not authenticated');
 
-    // Call our backend endpoint to handle complete deletion
-    const response = await fetch('/api/users/account', {
+    // Call backend endpoint with full URL
+    const apiUrl = `${import.meta.env.VITE_BACKEND_URL}/api/users/account`;
+    const response = await fetch(apiUrl, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -170,3 +187,70 @@ export const updateUserMetadata = async (metadata: Record<string, any>) => {
 
   return { data, error };
 };
+
+// Function to sign in with Google
+export const signInWithGoogle = async () => {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
+      }
+    }
+  });
+
+  if (error) {
+    console.error('Google sign in error:', error);
+    throw error;
+  }
+
+  return { data, error };
+};
+
+// Listen for auth state changes to handle new Google sign-ins
+// supabase.auth.onAuthStateChange(async (event, session) => {
+//   if (event === 'SIGNED_IN' && session?.user?.app_metadata?.provider === 'google') {
+//     // Check if user profile exists
+//     const { data: existingUser } = await supabase
+//       .from('users')
+//       .select('id')
+//       .eq('id', session.user.id)
+//       .single();
+
+//     if (!existingUser) {
+
+//       console.log('Debug - Full Session:', {
+//         session,
+//         user: session?.user,
+//         email_confirmed: session?.user?.email_confirmed_at,
+//         identities: session?.user?.identities,
+//         metadata: session?.user?.user_metadata
+//       });
+      
+//       // Get user's timezone
+//       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      
+//       // Create user profile
+//       const { error: profileError } = await supabase
+//         .from('users')
+//         .insert({
+//           id: session.user.id,
+//           email: session.user.email,
+//           name: session.user.user_metadata.full_name || session.user.email?.split('@')[0],
+//           contextual_drafting_enabled: true,
+//           action_item_conversion_enabled: true,
+//           timezone,
+//           auth_provider: 'google',
+//           is_active: true,
+//         });
+
+//       if (profileError) {
+//         console.error('Error creating user profile:', profileError);
+//       } else {
+//         console.log('User profile created successfully');
+//       }
+//     }
+//   }
+// });
