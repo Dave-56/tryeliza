@@ -190,6 +190,8 @@ export const updateUserMetadata = async (metadata: Record<string, any>) => {
 
 // Function to sign in with Google
 export const signInWithGoogle = async () => {
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -206,51 +208,12 @@ export const signInWithGoogle = async () => {
     throw error;
   }
 
+  console.log('Google sign in redirect data:', {
+    provider: data.provider,
+    url: data.url,
+    timezone: userTimezone
+  });
+
   return { data, error };
 };
 
-// Listen for auth state changes to handle new Google sign-ins
-// supabase.auth.onAuthStateChange(async (event, session) => {
-//   if (event === 'SIGNED_IN' && session?.user?.app_metadata?.provider === 'google') {
-//     // Check if user profile exists
-//     const { data: existingUser } = await supabase
-//       .from('users')
-//       .select('id')
-//       .eq('id', session.user.id)
-//       .single();
-
-//     if (!existingUser) {
-
-//       console.log('Debug - Full Session:', {
-//         session,
-//         user: session?.user,
-//         email_confirmed: session?.user?.email_confirmed_at,
-//         identities: session?.user?.identities,
-//         metadata: session?.user?.user_metadata
-//       });
-      
-//       // Get user's timezone
-//       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      
-//       // Create user profile
-//       const { error: profileError } = await supabase
-//         .from('users')
-//         .insert({
-//           id: session.user.id,
-//           email: session.user.email,
-//           name: session.user.user_metadata.full_name || session.user.email?.split('@')[0],
-//           contextual_drafting_enabled: true,
-//           action_item_conversion_enabled: true,
-//           timezone,
-//           auth_provider: 'google',
-//           is_active: true,
-//         });
-
-//       if (profileError) {
-//         console.error('Error creating user profile:', profileError);
-//       } else {
-//         console.log('User profile created successfully');
-//       }
-//     }
-//   }
-// });
