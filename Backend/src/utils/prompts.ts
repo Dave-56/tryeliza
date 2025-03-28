@@ -419,14 +419,28 @@ Follow this step-by-step reasoning process to analyze each email thread:
    - Use natural, conversational language that sounds like how a helpful colleague would explain an email
 
 5. Based on the summary, determine the appropriate category:
-   - Important Info: Business-critical communications requiring specific action or response
-        * CRITICAL: Check if this email is related to any task in "User's Current Tasks" - if there's a match based on subject, sender, or content, it MUST be categorized as "Important Info"
-        * CRITICAL: Any email that has already generated a task or requires action MUST be categorized as "Important Info"
+   - Important Info: STRICTLY for business-critical communications that MUST have ALL of these criteria:
+        * REQUIRES specific action or response with clear deadlines
+        * Has explicit action verbs (e.g., "submit by", "respond before", "schedule", "approve")
+        * The action has business impact (not just personal/administrative tasks)
+        * CRITICAL: Must be related to existing tasks or generate new tasks
+        * CRITICAL: If unsure about any of these criteria, categorize as Notifications instead
    - Calendar: Confirmed meetings/events, event reminders, scheduled appointments (NOT scheduling requests)
    - Payments: Financial transactions, invoices, receipts, billing statements
    - Travel: Bookings, itineraries, travel confirmations
    - Newsletters: Subscribed content, regular digests, informational content that doesn't require action
-   - Notifications: System alerts, password resets, account notifications, promotional emails, social media updates
+   - Notifications: Default category for any email that doesn't strictly meet other categories' criteria:
+        * System alerts and updates
+        * Password resets and account notifications
+        * Job application status updates and feedback requests
+        * Marketing and promotional content
+        * Social media notifications
+        * General FYI communications
+        * Any email where categorization is unclear
+        * Application feedback requests / received confirmations
+        * General process updates
+        * Optional survey requests
+        * Career newsletter subscriptions
 
 6. Determine priority score (0-100):
    - High (80-100): 
@@ -608,7 +622,13 @@ When creating next steps:
   - Service announcements
   - Event invitations requiring RSVP (like networking events, workshops)
   - Marketing/promotional content that doesn't fit other categories
-
+  - Job application status updates:
+    * Application received confirmations
+    * Application feedback requests
+    * General process updates
+    * Optional survey requests
+    * Job alert notifications
+    * Career newsletter subscriptions
 
 "Newsletters": For regular content digests and subscribed informational content:
   - Regular content digests
