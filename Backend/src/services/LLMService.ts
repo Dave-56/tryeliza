@@ -162,18 +162,6 @@ export class LLMService {
             return cleanAndParseJSON(content);
           }
         }
-        // Save the response to a file
-        const timestamp = new Date().toISOString().replace(/:/g, '-');
-        const logDir = './logs';
-        if (!fs.existsSync(logDir)) {
-          fs.mkdirSync(logDir, { recursive: true });
-        }
-        
-        
-        // Include processingType and responseType in the filename for better tracking
-        const filename = `${logDir}/llm_response_${processingType}_${timestamp}.json`;
-        fs.writeFileSync(filename, content);
-        console.log(`Saved LLM response to ${filename}`);
         
         // Use the cleanAndParseJSON utility for consistent handling
         try {

@@ -4,7 +4,6 @@ import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import EmailReplyParser from 'email-reply-parser';
 import { jsonrepair } from 'jsonrepair';
-import ThreadDebugLogger from './ThreadDebugLogger';
 import { SummarizationResponse } from '../Types/model';
 
 let jsonrepairModule: any;
@@ -559,13 +558,6 @@ export function cleanAndParseJSON(inputString: string) {
  */
 
 export async function cleanEmailText(text: string): Promise<string> {
-  // Log the input text for debugging
-  ThreadDebugLogger.log('Input text for cleanEmailText', {
-    textType: typeof text,
-    textLength: text ? text.length : 0,
-    textSample: text ? text.substring(0, 100) + (text.length > 100 ? '...' : '') : 'empty'
-  });
-  
   if (!text) return '';
   
   try {
@@ -964,9 +956,6 @@ export function validateThreadSummary(response: any): SummarizationResponse {
             return { categories: [], isPending: false, generatedAt: new Date() };
         }
         
-        // Keep track of seen messageIds to prevent duplicates
-        const seenMessageIds = new Set<string>();
-        
         // Process each category
         const processedCategories = parsedResponse.categories.map(category => {
             // Validate category title
@@ -979,18 +968,12 @@ export function validateThreadSummary(response: any): SummarizationResponse {
                 ? categoryTitle 
                 : 'Important Info';
             
-            // Process summaries in this category
+            // Process and deduplicate summaries in this category
             const summaries = Array.isArray(category.summaries) 
                 ? category.summaries.map(processSummary)
                 : [];
-                
-            // Filter out invalid summaries and duplicates
-            const validSummaries = summaries.filter(summary => {
-                if (!summary.messageId) return false;
-                if (seenMessageIds.has(summary.messageId)) return false;
-                seenMessageIds.add(summary.messageId);
-                return true;
-            });
+            
+            const validSummaries = deduplicateEmailSummaries(summaries);
             
             // Sort summaries by priority score (descending)
             const sortedSummaries = validSummaries.sort(
@@ -1023,26 +1006,8 @@ export function validateThreadSummary(response: any): SummarizationResponse {
             return categoryOrder.indexOf(a.title) - categoryOrder.indexOf(b.title);
         });
         
-        // Deduplicate summaries across categories
-        const deduplicatedSummaries: { [key: string]: any } = {};
-        sortedCategories.forEach(category => {
-            category.summaries.forEach(summary => {
-                deduplicatedSummaries[summary.messageId] = summary;
-            });
-        });
-        
-        // Reconstruct categories with deduplicated summaries
-        const finalCategories = sortedCategories.map(category => {
-            return {
-                title: category.title,
-                summaries: category.summaries.filter(summary => {
-                    return deduplicatedSummaries[summary.messageId] === summary;
-                })
-            };
-        });
-        
         return {
-            categories: finalCategories,
+            categories: sortedCategories,
             isPending: false,
             generatedAt: new Date()
         };
@@ -1050,6 +1015,37 @@ export function validateThreadSummary(response: any): SummarizationResponse {
         console.error('Error validating thread summary:', error);
         return { categories: [], isPending: false, generatedAt: new Date() };
     }
+}
+
+/**
+ * Creates a unique content signature for an email summary
+ */
+function createEmailContentSignature(summary: any): string {
+    return [
+        summary.title?.toLowerCase().trim(),
+        summary.headline?.toLowerCase().trim(),
+        summary.insights?.key_highlights?.[0]?.toLowerCase().trim()
+    ].filter(Boolean).join('|');
+}
+
+/**
+ * Deduplicates email summaries based on content similarity
+ */
+function deduplicateEmailSummaries(summaries: any[]): any[] {
+    const seenMessageIds = new Set<string>();
+    const seenContentHashes = new Set<string>();
+    
+    return summaries.filter(summary => {
+        if (!summary.messageId) return false;
+        if (seenMessageIds.has(summary.messageId)) return false;
+        
+        const contentKey = createEmailContentSignature(summary);
+        if (seenContentHashes.has(contentKey)) return false;
+        
+        seenMessageIds.add(summary.messageId);
+        seenContentHashes.add(contentKey);
+        return true;
+    });
 }
 
 /**
@@ -1139,19 +1135,4 @@ function processSummary(summary: any): {
         priorityScore,
         insights: validatedInsights
     };
-}
-
-/**
- * Get default priority score for a category
- */
-function getCategoryDefaultPriorityScore(category: string): number {
-    switch(category) {
-        case 'Important Info': return 100;
-        case 'Calendar': return 80;
-        case 'Payments': return 70;
-        case 'Travel': return 60;
-        case 'Newsletters': return 30;
-        case 'Notifications': return 40;
-        default: return 10;
-    }
 }

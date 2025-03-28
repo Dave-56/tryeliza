@@ -318,23 +318,21 @@ Please use natural language and active voice when you draft a response`;
 
 export function getThreadSummarizationPrompt(params: ThreadSummarizationParams): string {
     // Create context information
-    const categoryContext = params.category 
+    let categoryContext = params.category 
     ? `Pre-determined Category: ${params.category}` 
     : '';
-    
+
+    // Check for threads with tasks
+    const threadsWithTasks = params.threads.filter(thread => 
+        thread.taskInfo && thread.taskInfo.has_task === true
+    );
+
+    if (threadsWithTasks.length > 0) {
+        categoryContext = 'Pre-determined Category: Important Info';
+    }
+
     // Extract user information from email recipients
     const userInfo = extractUserInfoFromThreads(params.threads);
-    
-    // Format user tasks if available
-    const userTasksContext = params.userTasks && params.userTasks.length > 0 
-    ? `
-    User's Current Tasks:
-    ${params.userTasks.map(task => `
-    - ${task.title} (${task.priority}, ${task.status}${task.dueDate ? `, due: ${task.dueDate}` : ''})
-      ${task.description ? task.description : ''}
-    `).join('\n')}
-    ` 
-    : '';
 
     return `You are an AI assistant specialized in email intelligence for small businesses. Your task is to analyze email threads and transform them into actionable, categorized insights. Provide accurate and helpful summaries while avoiding any hallucination or invention of details not present in the original emails.
 
@@ -342,7 +340,18 @@ export function getThreadSummarizationPrompt(params: ThreadSummarizationParams):
     Current Date: ${params.currentDate}
     ${categoryContext ? `${categoryContext}\n` : ''}
     User: ${userInfo.name} (${userInfo.email})
-    ${userTasksContext}
+
+    Thread Task Information:
+    ${params.threads.map(thread => {
+        if (thread.taskInfo && thread.taskInfo.has_task) {
+            return `Thread ${thread.id}:
+            - Has Task: Yes
+            - Task Priority: ${thread.taskInfo.task_priority}
+            - Task Created: ${thread.taskInfo.task_created_at}
+            `;
+        }
+        return '';
+    }).filter(Boolean).join('\n')}
 
     Here are the email threads for analysis:
     Email Threads:
@@ -420,9 +429,25 @@ Follow this step-by-step reasoning process to analyze each email thread:
    - Notifications: System alerts, password resets, account notifications, promotional emails, social media updates
 
 6. Determine priority score (0-100):
-   - High (80-100): Requires immediate action (24-48 hours), has direct financial impact, or addresses critical business needs
-   - Medium (50-79): Important but not urgent (action within a week), provides significant business value or opportunities
+   - High (80-100): 
+   * Business-critical actions with immediate impact on:
+        - Revenue/costs
+        - Client relationships
+        - Project deadlines
+        - Team operations
+   - Medium (50-79): 
+     * Important business matters requiring attention within a week
+     * Team/project updates needing review
+     * Non-urgent client communications
+     * Business opportunities to evaluate
    - Low (0-49): Informational, no specific action required, or general content with minimal direct business impact
+     * System notifications and automated alerts
+     * Informational updates
+     * Newsletters
+     * Social media updates
+     * Any automated message that doesn't require business decisions
+   NOTE: System notifications (password resets, verifications, security alerts) should ALWAYS be scored as Low Priority (0-49) regardless of urgency, as they belong in the Notifications category.
+   
    For Newsletters specifically:
    - Default to Low priority (0-49) for most newsletter content
    - Only assign Medium priority (50-79) if the newsletter contains:
@@ -559,7 +584,13 @@ When creating next steps:
   - Review/approval requests
   - Must contain explicit action verbs like "discuss", "propose", "review", "confirm", "schedule", "respond"
   - Should NOT include system notifications, password resets, or promotional content
-  - IMPORTANT: Any email that has an associated task or requires action MUST be categorized as "Important Info"
+  - CRITICAL: Any email that has an associated task or requires action MUST be categorized as "Important Info"
+  - CRITICAL: If an email thread has an associated task (check userTasks), it MUST be categorized as "Important Info"
+  - CRITICAL: The priority_score for emails with associated tasks should match the task's priority level:
+    * Urgent tasks -> 90-100
+    * High priority tasks -> 80-89  
+    * Medium priority tasks -> 50-79
+    * Low priority tasks -> 0-49
 
 "Calendar": ONLY for confirmed meetings/events that the user has already committed to:
   - Confirmed appointments the user has already accepted
@@ -698,7 +729,8 @@ Required Output:
             }
         ],
         "is_complex": true,
-        "business_category": "string" // One of: "Revenue-Generating", "Operational", "Relationship-Building", "Compliance", "Other"
+        "business_category": "string" // One of: "Revenue-Generating", "Operational", "Relationship-Building", "Compliance", "Other",
+        "important_info_sync": true // CRITICAL: Always set to true since tasks MUST appear in Important Info
     },
     "confidence_score": 0.0-1.0,
     "reason": "Explanation considering full thread context and business category"
@@ -712,6 +744,16 @@ If no action is required, respond with:
 }
 
 --- INTERNAL GUIDELINES (For your reasoning only, do NOT include in output) ---
+
+CRITICAL SYNCHRONIZATION RULES:
+1. Any email that generates a task MUST appear in the Important Info category
+2. Task priority levels MUST align with Important Info priority scores:
+   - Urgent tasks -> 90-100 priority score in Important Info
+   - High priority tasks -> 80-89 priority score in Important Info
+   - Medium priority tasks -> 50-79 priority score in Important Info
+   - Low priority tasks -> 0-49 priority score in Important Info
+3. The confidence_score for task extraction should be at least 0.8 if the email meets Important Info criteria
+
 
 TASK EXTRACTION GUIDELINES:
 

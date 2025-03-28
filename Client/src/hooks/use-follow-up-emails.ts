@@ -33,6 +33,7 @@ export function useFollowUpEmails(taskId: number | null) {
       return response.data || [];
     },
     enabled: Boolean(apiClient.isAuthenticated()) && !!taskId,
+    refetchInterval: 10000, // Poll every 10 seconds
   });
 }
 

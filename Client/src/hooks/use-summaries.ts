@@ -11,6 +11,7 @@ import {
   CategorySummary
 } from '../types/email-digest';
 import { useEmailAccounts } from '@/hooks/use-email'; // Import useEmailAccounts hook
+import { useState } from 'react'; // Import useState hook
 
 // Helper function to determine the appropriate locale
 function getAppropriateLocale() {
@@ -70,41 +71,38 @@ export function formatUTCToLocal(utcDateString: string): string {
 
 // Main email digest hook
 export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?: Date | null) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { data: emailAccounts, isLoading: isLoadingEmailAccounts } = useEmailAccounts();
   const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive) ?? false;
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  return useQuery<BackendResponse<DailySummaryResponse>, Error, EmailDigestResponse>({
-    queryKey: ['email-digest', period, date ? format(date, 'yyyy-MM-dd') : undefined],
+  const { data, isLoading, error, refetch, isFetching } = useQuery<BackendResponse<DailySummaryResponse>, Error, EmailDigestResponse>({
+    queryKey: ['email-digest', period, date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')],
     queryFn: async () => {
-      console.log('Executing query with params:', {
-        url: `/api/daily-summaries?period=${period}${date ? `&date=${format(date, 'yyyy-MM-dd')}` : ''}`,
-        emailAccounts,
-        isGmailConnected,
-        isLoadingEmailAccounts
-      });
+      const queryDate = date || new Date();
+      const formattedDate = format(queryDate, 'yyyy-MM-dd');
       
-      let url = `/api/daily-summaries?period=${period}`;
-      
-      // Add date parameter if provided
-      if (date) {
-        url += `&date=${format(date, 'yyyy-MM-dd')}`;
+      setIsSyncing(true);
+      try {
+        const url = `/api/daily-summaries?period=${period}&date=${formattedDate}`;
+        const response = await apiClient.fetchWithAuth<DailySummaryResponse>(url);
+        return response;
+      } finally {
+        // Set syncing to false after response is received
+        setIsSyncing(false);
       }
-      
-      const response = await apiClient.fetchWithAuth<DailySummaryResponse>(url);
-      console.log('Raw backend response:', response);
-      return response;
     },
-    select: transformDailySummaryToDigest,
-    staleTime: 1000 * 60 * 5, // Data stays fresh for 5 minutes
-    refetchInterval: false,
-    retry: 3, // More retries for better reliability
-    enabled: !isLoadingEmailAccounts,
-    refetchOnMount: true, // Always refetch when component mounts
-    refetchOnWindowFocus: true, // Refetch when window regains focus
-    refetchOnReconnect: true // Refetch on network reconnection
+    select: (response) => transformDailySummaryToDigest(response),
+    enabled: !isLoadingEmailAccounts
   });
+
+  return {
+    data,
+    isLoading: isLoading || isSyncing,
+    error,
+    refetch,
+    isGmailConnected,
+    isFetching
+  };
 }
 
 // Interface for trigger endpoint response
@@ -200,7 +198,7 @@ function transformDailySummaryToDigest(response: BackendResponse<DailySummaryRes
     // First, group all summaries by category
     if (response.data?.categoriesSummary) {
       response.data.categoriesSummary.forEach(cat => {
-        const categoryName = cat.title || cat.category || 'Uncategorized';
+        const categoryName = cat.title || 'Uncategorized';
         const existingSummaries = categoryMap.get(categoryName) || [];
         const newSummaries = (cat.summaries || []).map(item => ({
           title: item.title || item.subject || 'No Subject',
@@ -222,7 +220,8 @@ function transformDailySummaryToDigest(response: BackendResponse<DailySummaryRes
       category: categoryName,
       count: summaries.length,
       summaries,
-      summary: `${summaries.length} email${summaries.length === 1 ? '' : 's'} in ${categoryName}`
+      summary: `${summaries.length} email${summaries.length === 1 ? '' : 's'} in ${categoryName}`,
+      isExpanded: false // Add the isExpanded field
     }));
     
     // Create the result object with only lastUpdated for UI

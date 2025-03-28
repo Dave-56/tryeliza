@@ -151,6 +151,12 @@ export interface ThreadSummarizationParams {
             date: string;
             content: string;
         }[];
+        taskInfo?: {
+            has_task: boolean;
+            task_id: number;
+            task_priority: string;
+            task_created_at: string;
+        };
     }[];
     currentDate: string;
     category?: string;

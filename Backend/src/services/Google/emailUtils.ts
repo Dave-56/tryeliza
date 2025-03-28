@@ -1,7 +1,6 @@
 import { gmail_v1 } from 'googleapis';
 import { EmailThread } from '../../Types/model';
 import { GoogleClient } from './GoogleClient';
-import ThreadDebugLogger from '../../utils/ThreadDebugLogger';
 
 export class EmailUtils extends GoogleClient {
     /**
@@ -53,61 +52,19 @@ export class EmailUtils extends GoogleClient {
      * Extracts the email body from the message payload
      */
     public getEmailBody(payload: gmail_v1.Schema$MessagePart | undefined): string {
-        // Log the payload structure for debugging
-        // ThreadDebugLogger.log('Email payload structure in getEmailBody', {
-        //     hasPayload: !!payload,
-        //     mimeType: payload?.mimeType,
-        //     hasDirectBody: !!payload?.body?.data,
-        //     bodySize: payload?.body?.data ? payload.body.data.length : 0,
-        //     hasParts: !!payload?.parts,
-        //     partsCount: payload?.parts?.length || 0,
-        //     partTypes: payload?.parts?.map(part => ({
-        //         mimeType: part.mimeType,
-        //         hasData: !!part.body?.data,
-        //         dataSize: part.body?.data ? part.body.data.length : 0,
-        //         hasNestedParts: !!part.parts,
-        //         nestedPartsCount: part.parts?.length || 0
-        //     })),
-        //     // Add actual body content sample if available
-        //     bodyContentSample: payload?.body?.data 
-        //         ? Buffer.from(payload.body.data, 'base64').toString().substring(0, 200) + '...' 
-        //         : 'No direct body content'
-        // });
-
         if (!payload) return '';
 
         // If the message is simple, get the body directly
         if (payload.body?.data) {
             const bodyText = Buffer.from(payload.body.data, 'base64').toString();
-            // ThreadDebugLogger.log('Found direct body data', {
-            //     bodyLength: bodyText.length,
-            //     bodySample: bodyText.substring(0, 200) + (bodyText.length > 200 ? '...' : ''),
-            //     fullBody: bodyText // Log the full body for complete verification
-            // });
             return bodyText;
         }
 
         // If the message is multipart, recursively get the text part
         if (payload.parts) {
-            // Log all available parts for better debugging
-            // ThreadDebugLogger.log('Available parts in multipart message', {
-            //     allParts: payload.parts.map(part => ({
-            //         mimeType: part.mimeType,
-            //         partId: part.partId,
-            //         filename: part.filename,
-            //         hasData: !!part.body?.data,
-            //         dataSize: part.body?.data ? part.body.data.length : 0
-            //     }))
-            // });
-            
             for (const part of payload.parts) {
                 if (part.mimeType === 'text/plain' && part.body?.data) {
                     const plainText = Buffer.from(part.body.data, 'base64').toString();
-                    // ThreadDebugLogger.log('Found text/plain part', {
-                    //     textLength: plainText.length,
-                    //     textSample: plainText.substring(0, 200) + (plainText.length > 200 ? '...' : ''),
-                    //     fullText: plainText // Log the full text for complete verification
-                    // });
                     return plainText;
                 }
                 // Recursively check parts
@@ -125,22 +82,10 @@ export class EmailUtils extends GoogleClient {
                     const html = Buffer.from(part.body.data, 'base64').toString();
                     // Basic HTML to text conversion
                     const plainText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-                    // ThreadDebugLogger.log('Found text/html part', {
-                    //     htmlLength: html.length,
-                    //     plainTextLength: plainText.length,
-                    //     plainTextSample: plainText.substring(0, 200) + (plainText.length > 200 ? '...' : ''),
-                    //     fullPlainText: plainText // Log the full converted text for verification
-                    // });
                     return plainText;
                 }
             }
         }
-
-        // ThreadDebugLogger.log('No text/plain or text/html part found in message', {
-        //     payloadMimeType: payload.mimeType,
-        //     availableParts: payload.parts?.map(p => p.mimeType) || []
-        // });
-
         return '';
     }
 
@@ -199,7 +144,7 @@ export class EmailUtils extends GoogleClient {
             const response = await this.gmail.users.messages.list({
                 userId: 'me',
                 q: `in:inbox after:${formattedDate}`,  // Gmail search query format: YYYY/MM/DD
-                maxResults: 15 // Limit to 10 messages for now - we can comment this out later
+                maxResults: 30 // Limit to 30 messages for now - we can comment this out later
             });
 
             console.log("Initial messages response:", {

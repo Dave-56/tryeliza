@@ -2,8 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LoginCredentials, SignupCredentials, User } from '@/types/model';
 import { useLocation } from 'wouter';
 import { useToast } from './use-toast';
-import { supabase, signIn, signUp, signOut, getUser, deleteAccount } from '@/lib/supabase-client';
+import { supabase, signIn, signUp, signOut, getUser, deleteAccount, TIMEZONE_KEY } from '@/lib/supabase-client';
 import { AuthError } from '@supabase/supabase-js';
+import { useEmailAccounts } from '@/hooks/use-email';
+import { useSupabaseGoogleIntegration } from '@/hooks/use-supabase-google';
+import { useEffect, useRef, useState } from 'react';
 
 type RequestResult = {
   ok: true;
@@ -11,19 +14,141 @@ type RequestResult = {
   ok: false;
   message: string;
 };
-
 // Using the proper User type from your model
 type UserState = User | null;
 
 export function useUser() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const supabaseGoogleIntegration = useSupabaseGoogleIntegration();
+  const { data: emailAccounts, isLoading: isLoadingAccounts } = useEmailAccounts();
+  // const integrationAttempted = useRef(false);
+
+  // Handle Google integration when email accounts finish loading
+  useEffect(() => {
+    const setupGoogleIntegration = async () => {
+      // if (integrationAttempted.current) return;
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        return;
+      }
+
+      // Return early if no session (user logged out)
+      if (!session) {
+        return;
+      }
+
+      const providerToken = session.provider_token;
+      const providerRefreshToken = session.provider_refresh_token;
+      const hasActiveGoogleAccount = emailAccounts?.find(account => account.provider === 'google')?.isActive ?? false;
+
+      if (!isLoadingAccounts && 
+          providerToken && 
+          providerRefreshToken && 
+          !hasActiveGoogleAccount) {
+        try {
+          // Update user metadata if needed for first-time Google sign-in
+          const { user } = session;
+          const identityData = user.identities?.[0]?.identity_data;
+          console.log('Checking Google sign-in conditions:', {
+            isGoogleProvider: user.app_metadata.provider === 'google',
+            identityData,
+            currentMetadata: user.user_metadata
+          });
+          if (user.app_metadata.provider === 'google' && providerToken) {
+            if (!identityData?.email) {
+              console.error('No identity data found for Google user');
+              return;
+            }
+
+            try {
+              // Use userinfo endpoint instead of People API
+              const response = await fetch(
+                'https://www.googleapis.com/oauth2/v2/userinfo',
+                {
+                  headers: {
+                    'Authorization': `Bearer ${providerToken}`
+                  }
+                }
+              );
+              
+              const profile = await response.json();
+              console.log('Google profile:', profile);
+              
+              const displayName = profile.name || identityData.email.split('@')[0];
+              const storedTimezone = localStorage.getItem(TIMEZONE_KEY) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              
+              await supabase.auth.updateUser({
+                data: {
+                  name: displayName,
+                  timezone: storedTimezone,
+                  contextual_drafting_enabled: true,
+                  action_item_conversion_enabled: true
+                }
+              });
+            } catch (error) {
+              console.error('Error fetching Google profile:', error);
+              // Fallback to email username if Google API fails
+              const storedTimezone = localStorage.getItem(TIMEZONE_KEY) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+              await supabase.auth.updateUser({
+                data: {
+                  name: identityData.email.split('@')[0],
+                  timezone: storedTimezone,
+                  contextual_drafting_enabled: true,
+                  action_item_conversion_enabled: true
+                }
+              });
+            }
+          }
+
+          await supabaseGoogleIntegration.mutateAsync({
+            accessToken: providerToken,
+            refreshToken: providerRefreshToken
+          });
+          
+          // Invalidate queries in sequence
+          await queryClient.invalidateQueries({ queryKey: ['/api/users/email-accounts'] });
+          await queryClient.invalidateQueries({ queryKey: ['daily-summaries'] });
+          
+          console.log('Gmail integration set up successfully');
+          toast({
+            description: "Gmail integration set up automatically!",
+          });
+          
+          // Invalidate queries in sequence
+          await queryClient.invalidateQueries({ queryKey: ['daily-summaries'] });
+        } catch (error) {
+          console.error('Error setting up Gmail:', error);
+          toast({
+            variant: "destructive",
+            description: "Failed to set up Gmail integration. You can try again in Settings.",
+          });
+        }
+      }
+    };
+
+    setupGoogleIntegration();
+  }, [isLoadingAccounts, emailAccounts]);
 
   const { data: user, isLoading } = useQuery<UserState>({
     queryKey: ['user'],
     queryFn: async () => {
+      const session = await supabase.auth.getSession();
+      console.log('Session:', session);
+      if (!session.data.session) return null;
+
       const supabaseUser = await getUser();
-      if(!supabaseUser) return null;
+      if (!supabaseUser) return null;
+
+      // Now that we have a valid session, check for stored timezone
+      const storedTimezone = localStorage.getItem(TIMEZONE_KEY);
+      if (storedTimezone) {
+        console.log('Found stored timezone:', storedTimezone);
+        localStorage.removeItem(TIMEZONE_KEY);
+      }
       
       // Fetch the user's data from the users table
       const { data: userData, error } = await supabase
@@ -37,7 +162,7 @@ export function useUser() {
         // If no user data found, return null to trigger re-authentication
         if (error.code === 'PGRST116') {
           console.log('User authenticated but profile not found in users table');
-          await supabase.auth.signOut(); // Sign out the user
+          await supabase.auth.signOut();
           return null;
         }
         throw error; // For other errors, throw to trigger error boundary
@@ -47,7 +172,27 @@ export function useUser() {
         console.error('No user data found after successful query');
         return null;
       }
-      
+
+      // If we have a stored timezone and it's different from the user's current timezone,
+      // update it in the database
+      if (storedTimezone && storedTimezone !== userData.timezone) {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ timezone: storedTimezone })
+          .eq('id', supabaseUser.id);
+
+        if (updateError) {
+          console.error('Error updating timezone:', updateError);
+          toast({
+            variant: "destructive",
+            description: "Failed to update timezone. You can update it in Settings.",
+          });
+        } else {
+          userData.timezone = storedTimezone;
+          console.log('Updated timezone in database:', storedTimezone);
+        }
+      }
+
       // Map Supabase user to your User type, using data from users table
       return {
         id: supabaseUser.id,
@@ -60,7 +205,7 @@ export function useUser() {
         created_at: userData.created_at,
       };
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const loginMutation = useMutation<RequestResult, Error, LoginCredentials>({
@@ -137,8 +282,8 @@ export function useUser() {
       } 
     },
     onSuccess: () => {
-      // Only invalidate user-related queries instead of clearing everything
-      queryClient.removeQueries({ queryKey: ['user'] });
+      // Clear all queries from the cache on logout
+      queryClient.clear();
       // Use replace to prevent back navigation to authenticated routes
       window.location.replace('/login');
     },
@@ -198,6 +343,8 @@ export function useUser() {
   return {
     user,
     isLoading,
+    isIntegratingGoogle: supabaseGoogleIntegration.isPending,
+    isGoogleSyncing: supabaseGoogleIntegration.isGoogleSyncing,
     isAuthenticated: !!user,
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,

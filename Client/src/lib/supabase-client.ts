@@ -8,6 +8,9 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
+// Store timezone in localStorage for use after redirect
+export const TIMEZONE_KEY = 'user_timezone';
+
 // Helper functions for auth
 export const getUser = async () => {
   const { data, error } = await supabase.auth.getUser();
@@ -189,31 +192,29 @@ export const updateUserMetadata = async (metadata: Record<string, any>) => {
 };
 
 // Function to sign in with Google
-// export const signInWithGoogle = async () => {
-//   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+export const signInWithGoogle = async () => {
+  // Store timezone before redirect
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  localStorage.setItem(TIMEZONE_KEY, userTimezone);
   
-//   const { data, error } = await supabase.auth.signInWithOAuth({
-//     provider: 'google',
-//     options: {
-//       queryParams: {
-//         access_type: 'offline',
-//         prompt: 'consent',
-//         scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
-//       }
-//     }
-//   });
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent select_account',  // Force consent screen and account selection
+        scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+      }
+    }
+  });
 
-//   if (error) {
-//     console.error('Google sign in error:', error);
-//     throw error;
-//   }
+  if (error) {
+    console.error('Google sign in error:', error);
+    throw error;
+  }
 
-//   console.log('Google sign in redirect data:', {
-//     provider: data.provider,
-//     url: data.url,
-//     timezone: userTimezone
-//   });
+  // We'll update the user metadata in the auth callback component
+  // since signInWithOAuth redirects to Google and doesn't return the user
 
-//   return { data, error };
-// };
-
+  return { data, error };
+};

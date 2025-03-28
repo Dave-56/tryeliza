@@ -271,9 +271,6 @@ export function SettingsPanel() {
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-base font-medium">Gmail Account Status</Label>
-                {/* <p className="text-sm text-muted-foreground">
-                  Not connected to Gmail
-                </p> */}
               </div>
               <GoogleAuthButton />
             </div>
@@ -316,7 +313,7 @@ export function SettingsPanel() {
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Permanently delete your account and all associated data. This action cannot be undone.
+                Request account deletion. Our support team will process your request and remove all associated data.
               </p>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -326,33 +323,26 @@ export function SettingsPanel() {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogTitle>Account Deletion Request</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete your account
-                      and remove all of your data from our servers, including:
-                      <ul className="list-disc list-inside mt-2 space-y-1">
-                        <li>All your email data and categories</li>
-                        <li>All your tasks and actions</li>
-                        <li>All your settings and preferences</li>
-                        <li>Gmail integration settings</li>
-                      </ul>
+                      To delete your account, please send us an email request. Click the button below to compose an email to our support team.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
-                      onClick={() => deleteAccount()}
+                      onClick={() => {
+                        const email = "hello@tryeliza.ai";
+                        const subject = "Account Deletion Request";
+                        const body = "I would like to request the deletion of my Eliza AI account.\n\nBest regards";
+                        window.open(
+                          `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+                          '_blank'
+                        );
+                      }}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      disabled={isDeleting}
                     >
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        "Delete Account"
-                      )}
+                      Send Email Request
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

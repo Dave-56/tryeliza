@@ -22,7 +22,7 @@ import { z } from "zod";
 import { useUser } from "@/hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Eye, EyeOff, Loader2 } from "lucide-react";
-import { requestPasswordReset } from "@/lib/supabase-client";
+import { requestPasswordReset, signInWithGoogle } from "@/lib/supabase-client";
 
 // Schema definitions remain unchanged
 const loginSchema = z.object({
@@ -208,22 +208,24 @@ export default function AuthPage() {
     }
   };
 
-  // const handleGoogleSignIn = async () => {
-  //   try {
-  //     setIsLoading(true);
-  //     await signInWithGoogle();
-  //     // Note: No need for success handling here as the user will be redirected to Google
-  //   } catch (error: any) {
-  //     console.error('Google sign in error:', error);
-  //     toast({
-  //       title: "Sign In Failed",
-  //       description: "We encountered an issue while signing in with Google. Please try again.",
-  //       variant: "destructive",
-  //     });
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      // await signInWithGoogle();
+      console.log('Signing in with Google...');
+      await signInWithGoogle();
+      // Note: No need for success handling here as the user will be redirected to Google
+    } catch (error: any) {
+      console.error('Google sign in error:', error);
+      toast({
+        title: "Sign In Failed",
+        description: "We encountered an issue while signing in with Google. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
@@ -322,7 +324,7 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                {/* <Button
+                <Button
                   type="button"
                   variant="outline"
                   className="w-full"
@@ -348,7 +350,7 @@ export default function AuthPage() {
                     />
                   </svg>
                   Continue with Google
-                </Button> */}
+                </Button>
 
               </form>
             </Form>

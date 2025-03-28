@@ -1,11 +1,10 @@
 import { db } from '../db/index';
-import { eq, desc, and, inArray } from 'drizzle-orm';
-import { emailAccounts, users, dailySummaries, emails, DailySummary, tasks, processedEmails } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
+import { emailAccounts, users, tasks, processedEmails } from '../db/schema';
 import { GoogleService } from './Google/GoogleService';
 import { EmailProcessingService } from './Email/EmailProcessingService';
 import { EmailSummaryService } from './Summary/EmailSummaryService';
 import { EmailThread, SummarizationResponse } from '../Types/model';
-import ThreadDebugLogger from '../utils/ThreadDebugLogger';
 
 interface SyncResult {
   synced: number;
@@ -186,10 +185,6 @@ export class EmailSyncService {
       return { ...stats, summary };
     } catch (error) {
       console.error("Error in email sync:", error);
-      ThreadDebugLogger.log('Error during email sync', {
-        error: error.message,
-        stack: error.stack
-      });
       throw error;
     }
   }

@@ -107,10 +107,10 @@ export const useDisconnectGmail = () => {
     },
     onError: (error) => {
       console.error('Error disconnecting Gmail:', error);
-      toast({
-        variant: "destructive",
-        description: "Failed to disconnect Gmail account. Please try again.",
-      });
+      // toast({
+      //   variant: "destructive",
+      //   description: "Failed to disconnect Gmail account. Please try again.",
+      // });
     },
   });
 };

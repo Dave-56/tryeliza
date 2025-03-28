@@ -6,8 +6,9 @@ import { chunkThreads } from '../../utils/tokenUtils.js';
 import { getThreadSummarizationPrompt } from '../../utils/prompts.js';
 import { IThreadSummarizationService } from './interfaces';
 import { EmailCategorizationService } from './EmailCategorizationService';
-import ThreadDebugLogger from '../../utils/ThreadDebugLogger.js';
-
+import { db } from '../../db/index'; // Assuming db is imported from somewhere
+import { and, inArray, eq } from 'drizzle-orm';
+import { processedEmails } from '../../db/schema';
 
 export class ThreadSummarizationService implements IThreadSummarizationService {
     constructor(
@@ -19,11 +20,31 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
     // Summarize threads
     public async summarizeThreads(threads: EmailThread[], userId?: string): Promise<SummarizationResponse> {
         try {
-            ThreadDebugLogger.log('Starting thread summarization', {
-                threadCount: threads.length,
-                threadsIds: threads.map(t => t.id),
-                threads
+            // Get task information for all threads
+            const threadTaskInfo = await db.query.processedEmails.findMany({
+                where: and(
+                    inArray(processedEmails.thread_id, threads.map(t => t.id)),
+                    eq(processedEmails.user_id, userId),
+                    eq(processedEmails.processing_type, 'task_extraction')
+                ),
+                columns: {
+                    thread_id: true,
+                    processing_result: true
+                }
             });
+
+            // Create a map of thread_id to task info
+            const threadTaskMap = new Map(
+                threadTaskInfo.map(info => [
+                    info.thread_id,
+                    info.processing_result?.metadata as {
+                        has_task: boolean;
+                        task_id: number;
+                        task_priority: string;
+                        task_created_at: string;
+                    }
+                ])
+            );
 
             // Skip pre-categorization and directly process all threads together
             const threadChunks = chunkThreads(threads, this.tokenLimit);
@@ -39,13 +60,14 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
                             from: msg.headers.from,
                             to: msg.headers.to,
                             date: msg.headers.date,
-                            content: msg.body,
-                            task: msg.task  // The prompt will use this to categorize as Important Info
-                        }))
+                            content: msg.body
+                        })),
+                        taskInfo: threadTaskMap.get(thread.id)
                     })),
                     currentDate: new Date().toISOString()
                 };
 
+                // Get the response from the AI
                 const prompt = getThreadSummarizationPrompt(params);
                 return this.agentService.summarizeThreads(prompt, userId);
             });
@@ -57,7 +79,6 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
             return this.mergeChunkResults(chunkResults);
             
         } catch (error) {
-            ThreadDebugLogger.log('Error summarizing threads:', error);
             console.error('Error summarizing threads:', error);
             throw new Error('Failed to summarize email threads');
         }
@@ -117,11 +138,13 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
             // Use the public wrapper method instead of accessing private methods directly
             const categoryResult = await this.categorizationService.getCategoryForThread(thread);
             
-            ThreadDebugLogger.log('Pre-categorization result:', {
-                threadId: thread.id,
-                category: categoryResult.category,
-                confidence: categoryResult.confidence
-            });
+            if (categoryResult.category && categoryResult.confidence > 0.8) {
+                return { 
+                    ...thread, 
+                    category: categoryResult.category, 
+                    confidence: categoryResult.confidence 
+                };
+            }
             
             if (categoryResult.category && categoryResult.confidence > 0.8) {
                 return { 
@@ -159,11 +182,6 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
             }
         });
 
-        ThreadDebugLogger.log('Grouped threads by category:', {
-            threadCount: categorizedThreads.length,
-        categories: Object.keys(categories)
-        });
-        
         return categories;
     }
 
@@ -186,14 +204,6 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
         
         // Assign a default priority score based on category
         const priorityScore = this.getDefaultPriorityScore(category);
-        
-        ThreadDebugLogger.log('Merging category chunks:', {
-            category,
-            summaryCount: uniqueSummaries.length,
-            priorityScore,
-            categoryCount: results.length,
-            categories: results.map(c => c.categories)
-        });
         
         return {
             title: category,
@@ -225,11 +235,6 @@ export class ThreadSummarizationService implements IThreadSummarizationService {
         const validCategories = categoryResults
             .filter((result): result is { title: string, summaries: any[], priorityScore: number } => result !== null)
             .sort((a, b) => b.priorityScore - a.priorityScore);
-
-        ThreadDebugLogger.log('Merging category results', {
-            categoryCount: categoryResults.length,
-            categories: categoryResults.map(c => c?.title)
-        });
         
         return { 
             categories: validCategories, 

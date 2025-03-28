@@ -12,7 +12,6 @@ import { ThreadSummarizationService } from './ThreadSummarizationService';
 import { AgentService } from '../Agent/AgentService.js';
 import { DEFAULT_TOKEN_LIMIT } from '../../utils/tokenUtils.js';
 import { cleanEmailText } from '../../utils/utils';
-import ThreadDebugLogger from '../../utils/ThreadDebugLogger.js';
 import { EmailFeatureExtractor } from '../ML/utils/featureExtraction';
 
 

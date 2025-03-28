@@ -5,6 +5,7 @@ import { BackendResponse, EmailProvider, Integration } from '../../Types/model';
 import auth from '../middleware/auth.js';
 import { handleCreateAccountForGoogle } from '../middleware/google-Integration.js';
 import { GoogleService } from '../../services/Google/GoogleService.js';
+import { handleSupabaseGoogleIntegration } from '../middleware/supabase-google-integration';
 
 
 // Define interface for email account response
@@ -168,6 +169,34 @@ router.post('/', auth, async (
     }
     
     res.status(500).json({ error: 'Failed to add email account', isSuccess: false });
+  }
+});
+
+// Handle Supabase Google integration
+router.post('/supabase-google', auth, async (req: Request, res: Response) => {
+  try {
+      const { accessToken, refreshToken } = req.body;
+      const userId = req.user.id; // Assuming you have auth middleware
+
+      if (!accessToken || !refreshToken) {
+          return res.status(400).json({ error: 'Missing tokens' });
+      }
+
+      const integration = await handleSupabaseGoogleIntegration(
+          accessToken,
+          refreshToken,
+          userId
+      );
+
+      console.log('Integration:', integration);
+      
+      res.status(201).json({
+        data: integration,
+        isSuccess: true
+      });
+  } catch (error) {
+      console.error('Supabase Google integration error:', error);
+      res.status(500).json({ error: 'Failed to integrate Google account' });
   }
 });
 

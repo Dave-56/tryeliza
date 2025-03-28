@@ -258,8 +258,6 @@ function useScheduledRefetch() {
   }, [queryClient]);
 }
   
- 
-  
 export function EmailDigest({ onTabChange }: EmailDigestProps) {
   const now = useMemo(() => startOfDay(new Date()), []);
   
@@ -320,22 +318,27 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   });
   
   const [timeOfDay, setTimeOfDay] = useState<"morning" | "evening">(() => {
+    const params = new URLSearchParams(window.location.search);
     const defaultPeriod = periodParam === 'morning' || periodParam === 'evening' 
       ? periodParam 
       : new Date().getHours() < 16 ? 'morning' : 'evening';
     
-    // Always ensure period is in URL
+    // Always ensure period and date are in URL
+    let needsUpdate = false;
     if (!periodParam) {
       params.set('period', defaultPeriod);
+      needsUpdate = true;
+    }
+    if (!dateParam) {
+      params.set('date', format(now, 'yyyy-MM-dd'));
+      needsUpdate = true;
+    }
+    if (needsUpdate) {
       window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
     }
     return defaultPeriod;
   });
 
-  const { toast } = useToast();
-
-  // Add manual sync mutation
-  const manualSync = useManualSync();
 
   useScheduledRefetch();
 
@@ -412,14 +415,12 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   const { data: emailAccounts, isLoading: isLoadingAccounts } = useEmailAccounts();
   const activeAccount = emailAccounts?.find(account => account.isActive);
   const [_, setLocation] = useLocation();
-  const { user, isLoading: isLoadingUser } = useUser();
+  const { user, isLoading: isLoadingUser, isIntegratingGoogle, isGoogleSyncing } = useUser();
 
-  // Define isLoadingState
-  const isLoadingState = Boolean(
-    isLoadingUser ||
-    isLoadingAccounts ||
-    (isLoading && !error) // Only show loading if we're loading for the first time and there's no error
-  );
+  // Define loading states
+  const isInitialLoading = isLoadingUser || isLoadingAccounts;
+  const isDataLoading = ((isLoading || isFetching) && !error);
+  const isLoadingState = isInitialLoading || isDataLoading || isIntegratingGoogle || isGoogleSyncing;
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({
@@ -452,10 +453,39 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   };
 
   // Basic loading checks
-  if (isLoadingUser || isLoadingAccounts) {
+  if (isLoadingState) {
+    let title = "Loading your emails...";
+    let message = "Please wait while we securely sync and analyze your emails.";
+
+    if (isIntegratingGoogle) {
+      title = "Setting up Gmail integration...";
+      message = "Please wait while we securely connect and sync your Gmail account. This may take a moment...";
+    } else if (isGoogleSyncing) {
+      title = "Syncing your Gmail account...";
+      message = "Please wait while we sync your Gmail account. This may take a moment...";
+    } else if (isInitialLoading) {
+      title = "Loading...";
+      message = "Please wait while we load your account information.";
+    }
+
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="container max-w-3xl mx-auto px-4">
+        <Card className="shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+              <div className="relative">
+                <Mail className="h-12 w-12 text-muted-foreground animate-pulse" />
+                <div className="absolute -bottom-1 -right-1">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              </div>
+              <h3 className="text-lg font-medium">{title}</h3>
+              <p className="text-sm text-muted-foreground text-center max-w-md">
+                {message}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

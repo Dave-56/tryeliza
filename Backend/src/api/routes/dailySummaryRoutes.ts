@@ -147,11 +147,11 @@ router.get('/', auth, async (
     const summary = await dailySummaryRepository.findByDateAndUser(userId, formattedDate, period);
     console.log('[DEBUG] Repository returned summary:', summary ? 'Found' : 'Not found');
 
-    if (summary && summary.categories_summary) {
-      console.log('[DEBUG] Summary has categories:', summary.categories_summary.length);
-      console.log('[DEBUG] Full summary object:', JSON.stringify(summary, null, 2));
-      console.log('[DEBUG] Categories summary:', JSON.stringify(summary.categories_summary, null, 2));
-    }
+    // if (summary && summary.categories_summary) {
+    //   console.log('[DEBUG] Summary has categories:', summary.categories_summary.length);
+    //   console.log('[DEBUG] Full summary object:', JSON.stringify(summary, null, 2));
+    //   console.log('[DEBUG] Categories summary:', JSON.stringify(summary.categories_summary, null, 2));
+    // }
     if (!summary) {
       console.log('[DEBUG] No summary found, returning empty response');
       // Return a valid response structure with empty categories instead of an error
@@ -211,7 +211,7 @@ router.get('/', auth, async (
       });
 
       // Log the sorted results
-      console.log('[DEBUG] Sorted categories by priority:', JSON.stringify(sortedCategories, null, 2));
+      //console.log('[DEBUG] Sorted categories by priority:', JSON.stringify(sortedCategories, null, 2));
       
       return sortedCategories;
     };

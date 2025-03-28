@@ -6,14 +6,14 @@
 //     mergeStrategy: 'overwrite' | 'merge';
 //     transaction?: DatabaseTransaction;
 //   }
-  
-//   export interface CategorySummary {
+
+// export interface CategorySummary {
 //     category: string;
 //     count: number;
 //     summaries: EmailSummary[];
-//   }
-  
-//   export interface EmailSummary {
+// }
+
+// export interface EmailSummary {
 //     subject: string;
 //     gmail_id: string;
 //     sender: string;
@@ -21,8 +21,8 @@
 //     headline: string;
 //     priority_score: number;
 //     insights?: {
-//       key_highlights?: string[];
-//       why_this_matters?: string;
-//       next_step?: string[];
+//         key_highlights?: string[];
+//         why_this_matters?: string;
+//         next_step?: string[];
 //     };
-//   }
+// }

@@ -39,7 +39,7 @@ export class SchedulerService {
       
       // Stop any jobs for timezones that no longer have users
       for (const [timezone, job] of this.activeJobs.entries()) {
-        if (!uniqueTimezones.includes(timezone)) {
+        if (!uniqueTimezones.includes(timezone.replace('-morning', '').replace('-evening', ''))) {
           job.stop();
           this.activeJobs.delete(timezone);
           console.log(`Stopped jobs for inactive timezone: ${timezone}`);
@@ -48,12 +48,12 @@ export class SchedulerService {
       
       // Create/update jobs for each timezone
       for (const timezone of uniqueTimezones) {
-        if (!this.activeJobs.has(timezone)) {
+        if (!this.activeJobs.has(`${timezone}-morning`)) {
           this.scheduleJobsForTimezone(timezone);
         }
       }
       
-      console.log(`Active timezone jobs updated. Current timezones: ${[...this.activeJobs.keys()].join(', ')}`);
+      console.log(`Active timezone jobs updated. Current timezones: ${[...this.activeJobs.keys()].map(key => key.replace('-morning', '').replace('-evening', '')).join(', ')}`);
     } catch (error) {
       console.error('Failed to update timezone jobs:', error);
     }
@@ -76,22 +76,55 @@ export class SchedulerService {
 
       // Evening summary at 4 PM in the timezone
       const eveningJob = cron.schedule('0 16 * * *', async () => {
-        const now = new Date();
-        // Check if it's actually 4 PM in this timezone
-        const tzTime = now.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', hour12: false });
-        if (parseInt(tzTime) === 16) {
-          console.log(`Running evening summary job for timezone: ${timezone}`);
-          await this.generateSummariesForTimezone(timezone, 'evening');
+        try {
+          const now = new Date();
+          console.log(`Evening job triggered for ${timezone} at ${now.toISOString()}`);
+          
+          // Check if it's actually 4 PM in this timezone
+          const tzTime = now.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', hour12: false });
+          const hour = parseInt(tzTime);
+          
+          console.log(`Current time in ${timezone}: ${hour}:00 (${tzTime})`);
+          
+          if (isNaN(hour)) {
+            console.error(`Invalid hour format for timezone ${timezone}: ${tzTime}`);
+            return;
+          }
+          
+          if (hour === 16) {
+            console.log(`Running evening summary job for timezone: ${timezone}`);
+            await this.generateSummariesForTimezone(timezone, 'evening');
+          } else {
+            console.log(`Skipping evening summary - wrong hour: ${hour} !== 16`);
+          }
+        } catch (error) {
+          console.error(`Error in evening job for ${timezone}:`, error);
         }
       }, {
         timezone
       });
 
-      // Store both jobs for this timezone
-      this.activeJobs.set(timezone, morningJob);
-      this.activeJobs.set(`${timezone}-evening`, eveningJob);
+      // Store both jobs with consistent naming
+      const morningKey = `${timezone}-morning`;
+      const eveningKey = `${timezone}-evening`;
       
-      console.log(`Scheduled jobs for timezone: ${timezone}`);
+      // Stop existing jobs if any
+      if (this.activeJobs.has(morningKey)) {
+        console.log(`Stopping existing morning job for ${timezone}`);
+        this.activeJobs.get(morningKey)?.stop();
+      }
+      if (this.activeJobs.has(eveningKey)) {
+        console.log(`Stopping existing evening job for ${timezone}`);
+        this.activeJobs.get(eveningKey)?.stop();
+      }
+      
+      this.activeJobs.set(morningKey, morningJob);
+      this.activeJobs.set(eveningKey, eveningJob);
+      
+      console.log(`Scheduled jobs for ${timezone}:`);
+      console.log(`- Morning job (${morningKey})`);
+      console.log(`- Evening job (${eveningKey})`);
+      console.log(`Total active jobs: ${this.activeJobs.size}`);
     } catch (error) {
       console.error(`Failed to schedule jobs for timezone ${timezone}:`, error);
     }
