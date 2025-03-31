@@ -17,6 +17,7 @@ interface WebhookGmailRequest {
         publishTime: string;
         messageId: string;
     };
+    subscription?: string; // Optional field for PubSub notifications
 }
 
 // Track webhook metrics
@@ -55,8 +56,10 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
         const startTime = Date.now();
         
         console.log(" 🔔 WEBHOOK: Received request to /gmail/notifications");
-        console.log(" 🔔 WEBHOOK: Request headers:", JSON.stringify(req.headers, null, 2));
-        console.log(" 🔔 WEBHOOK: Request body:", JSON.stringify(req.body, null, 2));
+        console.log(" 🔔 WEBHOOK: Request source IP:", req.ip);
+        console.log(" 🔔 WEBHOOK: Is PubSub format:", Boolean(req.body.message && req.body.subscription));
+        console.log(" 🔔 WEBHOOK: Headers:", JSON.stringify(req.headers, null, 2));
+        console.log(" 🔔 WEBHOOK: Body:", JSON.stringify(req.body, null, 2));
 
         // For Google Pub/Sub notifications, we'll skip the authentication check
         // since Pub/Sub doesn't forward the Authorization header

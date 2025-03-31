@@ -42,6 +42,12 @@ export class EmailCategorizationService implements IEmailCategorizationService {
     // Main categorization function that implements IEmailCategorizationService interface
     async categorizeEmail(emailAccount: EmailAccount, emailThread: EmailThread, existingTx?: any): Promise<EmailCategorization | null> {
         try {
+            console.log('Starting email categorization for thread:', {
+                threadId: emailThread.id,
+                messageCount: emailThread.messages.length,
+                firstMessageSubject: emailThread.messages[0]?.headers?.subject
+            });
+
             // Use existing transaction if provided, otherwise start a new one
             const executeWithTransaction = async (tx: any) => {
                 try {
@@ -53,12 +59,17 @@ export class EmailCategorizationService implements IEmailCategorizationService {
 
                     // If action item conversion is disabled or user not found, return null
                     if (!userSettings?.[0]?.action_item_conversion_enabled) {
+                        console.log('Action item conversion disabled for user, skipping task extraction');
                         return null;
                     }
 
                     // Check if task already exists for this message
                     const existingTask = await this.taskService.checkExistingTask(tx, emailThread);
                     if (existingTask) {
+                        console.log('Existing task found:', {
+                            taskId: existingTask.id,
+                            threadId: emailThread.id
+                        });
                         return {
                             isActionRequired: false,
                             task: existingTask
@@ -67,6 +78,11 @@ export class EmailCategorizationService implements IEmailCategorizationService {
 
                     // Get messages that need processing
                     const messagesToProcess = await this.recordService.getMessagesToProcess(tx, emailThread, emailAccount.user_id);
+                    console.log('Messages to process:', {
+                        count: messagesToProcess.length,
+                        messageIds: messagesToProcess.map(m => m.id)
+                    });
+
                     if (messagesToProcess.length === 0) {
                         console.log('All emails in the thread have been processed');
                         return null;
@@ -80,12 +96,27 @@ export class EmailCategorizationService implements IEmailCategorizationService {
                         // Continue with task extraction even if email record creation fails
                     }
                     
+                    console.log('Calling LLM for task extraction:', {
+                        threadId: emailThread.id,
+                        userEmail: emailAccount.email_address,
+                        userId: emailAccount.user_id
+                    });
+
                     // Query LLM for task data
                     const taskData = await this.agentService.extractTaskFromEmail(
                         emailThread, 
                         emailAccount.email_address,
                         emailAccount.user_id
                     );
+
+                    console.log('LLM task extraction result:', {
+                        threadId: emailThread.id,
+                        requiresAction: taskData.requires_action,
+                        confidenceScore: taskData.confidence_score,
+                        reason: taskData.reason,
+                        taskTitle: taskData.task?.title
+                    });
+
                     const requiresAction = taskData.requires_action;
                     
                     // Update processed emails status
@@ -93,7 +124,45 @@ export class EmailCategorizationService implements IEmailCategorizationService {
                     
                     let task = null;
                     if (requiresAction) {
-                        task = await this.taskService.createTaskAndActionItems(tx, taskData, emailThread, emailAccount);
+                        try {
+                            console.log('Creating task from LLM result:', {
+                                threadId: emailThread.id,
+                                taskTitle: taskData.task?.title,
+                                userId: emailAccount.user_id
+                            });
+                            
+                            // Log the state after updating processed emails
+                            console.log('ProcessedEmails status updated:', {
+                                threadId: emailThread.id,
+                                messageCount: messagesToProcess.length,
+                                requiresAction
+                            });
+
+                            console.log("Just before creating task")
+
+                            task = await this.taskService.createTaskAndActionItems(tx, taskData, emailThread, emailAccount);
+                            
+                            if (!task) {
+                                console.error('Task creation returned null:', {
+                                    threadId: emailThread.id,
+                                    taskData: JSON.stringify(taskData)
+                                });
+                            } else {
+                                console.log('Task created successfully:', {
+                                    taskId: task.id,
+                                    threadId: emailThread.id
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error creating task:', {
+                                error: error.message,
+                                stack: error.stack,
+                                threadId: emailThread.id,
+                                taskTitle: taskData.task?.title
+                            });
+                            // Re-throw to be caught by outer catch block
+                            throw error;
+                        }
                     }
                     
                     return {
@@ -103,6 +172,7 @@ export class EmailCategorizationService implements IEmailCategorizationService {
                 } catch (error) {
                     console.error('Error categorizing email:', {
                         error: error.message,
+                        stack: error.stack,
                         emailId: emailThread.messages[0].id,
                         userId: emailAccount.user_id
                     });
@@ -117,7 +187,11 @@ export class EmailCategorizationService implements IEmailCategorizationService {
                 return await db.transaction(executeWithTransaction);
             }
         } catch (error) {
-            console.error(`Error in categorizeEmail: ${error}`);
+            console.error(`Error in categorizeEmail:`, {
+                error: error.message,
+                stack: error.stack,
+                threadId: emailThread.id
+            });
             return null;
         }
     }

@@ -4,6 +4,7 @@ import { tasks, EmailAccount, taskActions, processedEmails } from '../../db/sche
 import { eq, inArray, or, and } from 'drizzle-orm';
 import { EmailThread, } from '../../Types/model';
 import { TaskData } from './interfaces';
+import ThreadDebugLogger from '../../utils/ThreadDebugLogger';
 
 export class EmailTaskService {
     constructor(private db: any) {}
@@ -24,7 +25,10 @@ export class EmailTaskService {
         });
 
         if (existingTask) {
-            console.log(`Task already exists for thread with ID ${emailThread.id} (found via message ID ${existingTask.email_id})`);
+            // ThreadDebugLogger.log(`Task already exists for thread`, {
+            //     threadId: emailThread.id,
+            //     existingTaskId: existingTask.email_id
+            // });
         }
         
         return existingTask;
@@ -35,10 +39,12 @@ export class EmailTaskService {
      */
     public async createTaskAndActionItems(tx: any, taskData: TaskData, emailThread: EmailThread, emailAccount: EmailAccount) {
         // Create the task first
+        console.log("Creating task...")
         const task = await this.createTask(tx, taskData, emailThread, emailAccount);
         
         // If task creation was successful and task has action items
         if (task && taskData.task?.action_items) {
+            console.log("Creating action items...")
             await this.createActionItems(tx, task.id, taskData.task.action_items);
         }
 
@@ -51,7 +57,7 @@ export class EmailTaskService {
                         has_task: true,
                         task_id: task.id,
                         task_priority: taskData.task?.priority,
-                        task_created_at: new Date().toISOString()
+                        task_created_at: new Date() // Store as Date object, not string
                     }
                 }
             })
@@ -60,63 +66,143 @@ export class EmailTaskService {
                 eq(processedEmails.user_id, emailAccount.user_id)
             ));
 
+        console.log("Task created successfully")
         return task;
+
     }
 
     private async createTask(tx: any, taskData: TaskData, emailThread: EmailThread, emailAccount: EmailAccount) {
-        // Return early if taskData.task is undefined
-        if (!taskData.task) {
-            console.warn('Cannot create task: taskData.task is undefined');
-            return null;
-        }
-
-        const taskInsertData = {
-            user_id: emailAccount.user_id,
-            account_id: emailAccount.id,
-            title: taskData.task.title,
-            description: taskData.task.description,
-            priority: taskData.task.priority,
-            due_date: taskData.task.dueDate,
-            status: 'pending',
-            thread_id: emailThread.id,
-            message_id: emailThread.messages[0].id,
-            created_at: new Date(),
-            updated_at: new Date()
-        };
-        
-        const [task] = await tx.insert(tasks).values(taskInsertData).returning();
-
-        console.log("Task created: ", {
-            name: 'EmailCategorizedSuccessfully',
-            properties: { 
-                emailId: emailThread.messages[0].id,
-                taskId: task.id,
-                isComplex: taskData.task.is_complex === true
+        try {
+            // Return early if taskData.task is undefined
+            if (!taskData.task) {
+                // ThreadDebugLogger.log('Cannot create task: taskData.task is undefined', {
+                //     threadId: emailThread.id,
+                //     taskData: JSON.stringify(taskData)
+                // });
+                return null;
             }
-        });
 
-        return task;
+            // Check for existing task first
+            const existingTask = await this.checkExistingTask(tx, emailThread);
+            if (existingTask) {
+                // ThreadDebugLogger.log('Task already exists for thread', {
+                //     threadId: emailThread.id,
+                //     existingTaskId: existingTask.id
+                // });
+                return existingTask;
+            }
+
+            // Parse due date if it exists
+            let dueDate = null;
+            if (taskData.task.dueDate) {
+                try {
+                    dueDate = new Date(taskData.task.dueDate);
+                    // Validate the date is valid
+                    if (isNaN(dueDate.getTime())) {
+                        // ThreadDebugLogger.log('Invalid due date format', {
+                        //     dueDate: taskData.task.dueDate,
+                        //     threadId: emailThread.id
+                        // });
+                        dueDate = null;
+                    }
+                } catch (error) {
+                    // ThreadDebugLogger.log('Error parsing due date', {
+                    //     error: error.message,
+                    //     dueDate: taskData.task.dueDate,
+                    //     threadId: emailThread.id
+                    // });
+                    dueDate = null;
+                }
+            }
+
+            const taskInsertData = {
+                user_id: emailAccount.user_id,
+                account_id: emailAccount.id,
+                title: taskData.task.title,
+                description: taskData.task.description,
+                priority: taskData.task.priority,
+                due_date: dueDate,
+                status: 'Inbox',
+                thread_id: emailThread.id,
+                email_id: emailThread.messages[0].id,
+                sender_name: emailThread.messages[0].headers?.from || 'Unknown Sender',
+                sender_email: emailThread.messages[0].headers?.from?.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.pop() || null,
+                team_name: null,
+                column_id: 1,
+                position: null,
+                brief_text: taskData.task.brief_text,
+                ai_summary: taskData.task.ai_summary,
+                category: 'Important Info',
+                received_date: new Date(emailThread.messages[0].headers?.date ?? Date.now()),
+                created_at: new Date(),
+                updated_at: new Date()
+            };
+
+            // ThreadDebugLogger.log('Attempting to insert task', {
+            //     threadId: emailThread.id,
+            //     taskTitle: taskData.task.title,
+            //     userId: emailAccount.user_id,
+            //     insertData: { ...taskInsertData, description: taskInsertData.description?.substring(0, 100) }
+            // });
+            
+            const [task] = await tx.insert(tasks).values(taskInsertData).returning();
+
+            if (!task) {
+                // ThreadDebugLogger.log('Task insert returned null', {
+                //     threadId: emailThread.id,
+                //     taskTitle: taskData.task.title
+                // });
+                return null;
+            }
+
+            // ThreadDebugLogger.log('Task created successfully', {
+            //     taskId: task.id,
+            //     threadId: emailThread.id,
+            //     title: task.title
+            // });
+
+            return task;
+        } catch (error) {
+            // ThreadDebugLogger.log('Error creating task', {
+            //     error: error.message,
+            //     stack: error.stack,
+            //     threadId: emailThread.id,
+            //     taskTitle: taskData.task?.title,
+            //     userId: emailAccount.user_id
+            // });
+            throw error;
+        }
     }
 
     private async createActionItems(tx: any, taskId: number, actionItems: Array<{action_text: string, position: number}>) {
-        // Only insert action items if there are any
-        const isComplex = actionItems.length > 0;
-        
-        if (isComplex) {
-            console.log(`Creating ${actionItems.length} action items for complex task: ${taskId}`);
-            
-            // Make sure positions are sequential starting from 1
-            const actionItemsToInsert = actionItems
-                .map((item, index) => ({
-                    task_id: taskId,
-                    action_text: item.action_text,
-                    // Use the provided position or calculate based on index (1-based)
-                    position: item.position || (index + 1),
-                }));
-            
-            await tx.insert(taskActions).values(actionItemsToInsert);
-        } else {
-            console.log(`Task ${taskId} is not complex or has no action items. Skipping action item creation.`);
+        // If there are no action items, log and return
+        if (!actionItems || actionItems.length === 0) {
+            // ThreadDebugLogger.log('No action items to create', {
+            //     taskId
+            // });
+            return;
         }
+
+        // Make sure positions are sequential starting from 1
+        const actionItemsData = actionItems.map((item, index) => ({
+            task_id: taskId,
+            action_text: item.action_text,
+            // Use the provided position or calculate based on index (1-based)
+            position: item.position || (index + 1),
+            is_completed: false,
+            created_at: new Date(),
+            updated_at: new Date()
+        }));
+
+        // ThreadDebugLogger.log('Creating action items', {
+        //     taskId,
+        //     count: actionItems.length,
+        //     items: actionItemsData.map(item => ({
+        //         text: item.action_text,
+        //         position: item.position
+        //     }))
+        // });
+
+        await tx.insert(taskActions).values(actionItemsData);
     }
 }

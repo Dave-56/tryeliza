@@ -17,6 +17,8 @@ export interface TaskData {
     priority: PriorityLevel;
     dueDate?: string;
     is_complex?: boolean;
+    ai_summary: string;  // Required - AI insights about task importance
+    brief_text: string;  // Required - Concise task summary
     action_items?: Array<{
       action_text: string;
       position: number;

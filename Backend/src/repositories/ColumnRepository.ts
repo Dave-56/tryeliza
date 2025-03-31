@@ -46,38 +46,11 @@ export class ColumnRepository extends BaseRepository<Column, InsertColumn> {
           tasks: {
             where: (tasks, { eq }) => eq(tasks.user_id, userId),
             orderBy: (tasks, { asc }) => [asc(tasks.position)],
-            columns: {
-              id: true,
-              title: true,
-              description: true,
-              position: true,
-              status: true,
-              priority: true,
-              due_date: true,
-              user_id: true,
-              column_id: true,
-              email_id: true,
-              thread_id: true,
-              account_id: true,
-              created_at: true,
-              updated_at: true,
-              sender_name: true,
-              sender_email: true,
-              team_name: true,
-              category: true,
-              brief_text: true,
-              ai_summary: true,
-              received_date: true
-            },
             with: {
               actions: {
                 orderBy: (actions, { asc }) => [asc(actions.position)]
               },
-              waitingInfo: {
-                columns: {
-                  reminder_sent: true
-                }
-              }
+              waitingInfo: true
             }
           }
         }

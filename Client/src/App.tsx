@@ -19,6 +19,7 @@ import { useUser } from "@/hooks/use-user";
 import { Loader2 } from "lucide-react";
 import VerifyEmail from "@/pages/verify-email";
 import EmailVerifyCallback from "@/pages/email-verify-callback";
+import { useSessionTimeout } from "@/hooks/use-session-timeout";
 
 function Router() {
   const { user, isLoading } = useUser();

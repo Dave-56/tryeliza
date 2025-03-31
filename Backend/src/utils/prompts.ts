@@ -41,19 +41,6 @@ function extractUserInfoFromThreads(threads: any[]): { name: string; email: stri
   return userInfo;
 }
 
-// interface TaskCategorizationParams {
-//     task: {
-//         title: string;
-//         description: string;
-//         priority: PriorityLevel;
-//         dueDate?: string;
-//         context?: {
-//             participants: { email: string; role: string }[];
-//             relevantMessages: { index: number; relevance: string }[];
-//         };
-//     };
-// }
-
 export interface DbTask {
   id: number;
   user_id: string;
@@ -193,6 +180,8 @@ If any action is required, respond with a JSON object containing task details wi
     "task": {
         "title": "Brief, action-oriented title",
         "description": "Detailed description incorporating thread context",
+        "brief_text": "Concise 1-2 sentence summary of the task",
+        "ai_summary": "AI-generated insights about task importance and context",
         "priority": "${PriorityLevel ? Object.values(PriorityLevel).join('" | "') : 'urgent" | "high" | "medium" | "low'}",
         "dueDate": "YYYY-MM-DD",
         "completed": false,
@@ -285,10 +274,24 @@ Examples of what should NOT be tasks:
 Respond only with the JSON object, no other text.`;
 }
 
-export function getDraftGenerationPrompt(params: { thread: EmailMessage[], recipient: string, senderName?: string }): string {
+export function getDraftGenerationPrompt(params: { thread: EmailMessage[], recipient: string, senderName?: string, actionType?: string }): string {
+    const actionGuidance = params.actionType ? `
+Action Type: ${params.actionType}
+Follow-up Guidelines:
+${params.actionType === 'send_final_notice' ? 
+    '- This is a final follow-up attempt\n- Be firm but professional\n- Clearly state the urgency and implications\n- Suggest escalation path if no response' :
+params.actionType === 'send_followup' ?
+    '- Keep tone friendly but direct\n- Reference previous communication\n- Ask if they need help or clarification\n- Suggest next steps' :
+params.actionType === 'suggest_alternative' ?
+    '- Propose alternative solutions\n- Be constructive and flexible\n- Offer different options\n- Ask for their preference' :
+params.actionType === 'schedule_meeting' ?
+    '- Suggest specific meeting times\n- Keep it brief and focused\n- Provide clear agenda points\n- Include meeting duration' : ''
+}` : '';
+
     return `You are an AI assistant that generates email draft responses. 
     The recipient is ${params.recipient}
     The sender is ${params.senderName || 'the user'}
+${actionGuidance}
     
 Email Thread:
 ${params.thread.map((msg, i) => `
@@ -313,7 +316,8 @@ Generate a draft response in JSON format:
 }
 
 For the body, ensure it follows proper email structure with greeting, paragraphs, and signature.
-Please use natural language and active voice when you draft a response`;
+Please use natural language and active voice when you draft a response.
+${params.actionType === 'send_final_notice' ? 'This is a final notice - maintain professionalism while conveying urgency.' : ''}`;
 }
 
 export function getThreadSummarizationPrompt(params: ThreadSummarizationParams): string {
@@ -734,6 +738,8 @@ Required Output:
     "task": {
         "title": "Brief, action-oriented title",
         "description": "Detailed description incorporating thread context",
+        "brief_text": "REQUIRED: Write a clear, concise 1-2 sentence summary that captures the core task requirement",
+        "ai_summary": "REQUIRED: Provide key insights about task importance, business impact, and any critical context from the email thread",
         "priority": "${PriorityLevel ? Object.values(PriorityLevel).join('" | "') : 'urgent" | "high" | "medium" | "low'}",
         "dueDate": "YYYY-MM-DD",
         "completed": false,
@@ -764,6 +770,20 @@ If no action is required, respond with:
 }
 
 --- INTERNAL GUIDELINES (For your reasoning only, do NOT include in output) ---
+
+FIELD REQUIREMENTS:
+1. brief_text:
+   - Must be 1-2 sentences that clearly state what needs to be done
+   - Focus on the core action/requirement
+   - Be specific and actionable
+   - Example: "Review and approve Q1 budget proposal from Finance team by Friday"
+
+2. ai_summary:
+   - Provide strategic context and importance
+   - Include business impact or consequences
+   - Highlight any critical dependencies or stakeholders
+   - Example: "High-priority budget approval blocking Finance team's quarterly planning. Approval needed within 48 hours to maintain department timelines."
+Note: Both brief_text and ai_summary fields are REQUIRED and must be provided for every task.
 
 CRITICAL SYNCHRONIZATION RULES:
 1. Any email that generates a task MUST appear in the Important Info category
@@ -1034,18 +1054,44 @@ export function getWaitingTaskActionPrompt(params: {
         description: string;
         priority: string;
         due_date?: string;
+        task_type?: 'approval' | 'information' | 'action' | 'deadline' | 'other';
     };
     waiting_for: string;
     waiting_time: string;
     notes?: string;
+    email_thread?: {
+        messages: Array<{
+            sender: string;
+            recipient: string;
+            subject: string;
+            content: string;
+            timestamp: string;
+        }>;
+        last_response_time?: string;
+    };
 }): string {
 
     const notesSection = params.notes ? `
     Task Notes:
     ${params.notes}
     ` : '';
-    return `You are an AI assistant helping to manage tasks that have been waiting for follow-up.
-        
+
+    const emailThreadSection = params.email_thread ? `
+    Email Thread History:
+    ${params.email_thread.messages.map(msg => `
+    From: ${msg.sender}
+    To: ${msg.recipient}
+    Time: ${msg.timestamp}
+    Subject: ${msg.subject}
+    Content: ${msg.content}
+    `).join('\n---\n')}
+    Last response received: ${params.email_thread.last_response_time || 'No response yet'}
+    ` : '';
+
+    return `You are an AI assistant whose primary mission is to ensure no task slips through the cracks. This task has been pending for ${params.waiting_time}, exceeding the 3-day follow-up threshold. Your goal is to move this task towards completion.
+
+Review the following context carefully to determine the most effective next action:
+
 Task Information:
 - Title: ${params.task.title}
 - Description: ${params.task.description || 'No description provided'}
@@ -1055,13 +1101,26 @@ Task Information:
 - Waiting time: ${params.waiting_time}
 - Due date: ${params.task.due_date || 'No due date'}
 ${notesSection}
+${emailThreadSection}
 
-This task has been waiting for ${params.waiting_time}. Determine the most appropriate next action to take.
+Based on the email thread history, notes, and task information, determine the most appropriate action to move this task forward. If previous follow-up attempts haven't yielded results, consider whether it's time to escalate to human intervention.
 
 Return your response in the following JSON format:
 {
-    "action": "follow_up_email" | "escalate" | "continue_waiting" | "close_task",
-    "reason": "Detailed explanation for why this action is appropriate",
-    "confidence": 0.0-1.0
+    "action":     
+    | "send_followup"          
+    | "send_final_notice"      
+    | "suggest_alternative"    
+    | "schedule_meeting"       
+    | "close_as_complete"      
+    | "close_as_obsolete"       
+    | "escalate"
+    | "continue_waiting" 
+    "goal": "Specific objective for moving this task forward",
+    "strategy": "Specific approach based on previous interactions and current context",
+    "reason": "Detailed explanation of why this action is the best way to progress the task",
+    "confidence": 0.0-1.0,
+    "suggested_next_check": "Recommended time for next follow-up if this attempt fails",
+    "escalation_recommendation": "If suggesting escalation, explain why automated follow-ups are no longer effective and what human intervention is needed"
 }`;
 }

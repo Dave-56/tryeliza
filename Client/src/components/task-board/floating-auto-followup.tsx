@@ -48,7 +48,7 @@ export const FloatingAutoFollowup: FC<FloatingAutoFollowupProps> = ({ taskId }) 
                   </p>
                 ) : (
                   <p className="text-sm text-purple-700 flex items-center">
-                    <span className="font-medium">{draftedEmails.length}</span>
+                    <span className="text-lg font-bold">{draftedEmails.length}</span>
                     <span>&nbsp;follow-up email{draftedEmails.length !== 1 ? 's' : ''} ready to send</span>
                   </p>
                 )}

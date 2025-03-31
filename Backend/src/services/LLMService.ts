@@ -126,8 +126,8 @@ export class LLMService {
         content = content.replace(/^```json\s*/, '').replace(/```$/, '').trim();
         
         // Log the raw content for debugging (truncated for readability)
-        console.log("Raw LLM response:", content.length > 200 ? 
-          `${content.substring(0, 200)}... (${content.length} chars total)` : content);
+        // console.log("Raw LLM response:", content.length > 200 ? 
+        //   `${content.substring(0, 200)}... (${content.length} chars total)` : content);
         
         if(userId) {
           try {

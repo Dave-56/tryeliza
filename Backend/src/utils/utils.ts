@@ -303,7 +303,7 @@ export const extractEmailInfoFromMessage = (message: EmailMessage, thread?: Emai
 export function cleanAndParseJSON(inputString: string) {
     try {
         // Log the input for debugging
-        console.log("Attempting to parse JSON input:", inputString.substring(0, 100) + (inputString.length > 100 ? "..." : ""));
+        //console.log("Attempting to parse JSON input:", inputString.substring(0, 100) + (inputString.length > 100 ? "..." : ""));
         
         // Step 1: Clean the string by removing markdown code blocks if present
         let cleanedString = inputString

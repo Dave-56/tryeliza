@@ -136,6 +136,7 @@ export const waitingTasks = pgTable("waiting_tasks", {
   waiting_for: text("waiting_for"), // "John Peterson", "Finance Department"
   reminder_sent: boolean("reminder_sent").default(false),
   last_reminder_date: timestamp("last_reminder_date"),
+  last_action_type: text("last_action_type"), // Track the last action taken
   created_at: timestamp("created_at").defaultNow(),
   updated_at: timestamp("updated_at").defaultNow(),
 });
@@ -163,6 +164,9 @@ export const followUpEmails = pgTable("follow_up_emails", {
   email_content: text("email_content").notNull(),
   recipient: text("recipient").notNull(),
   status: text("status").notNull(), // 'drafted', 'sent', 'scheduled'
+  action_type: text("action_type"), // 'send_followup', 'send_final_notice', etc.
+  is_final_notice: boolean("is_final_notice").default(false),
+  suggested_meeting_times: jsonb("suggested_meeting_times"),
   scheduled_time: timestamp("scheduled_time"),
   created_at: timestamp("created_at").defaultNow(),
   updated_at: timestamp("updated_at").defaultNow(),
@@ -190,6 +194,7 @@ export const draftActivities = pgTable("draft_activities", {
     .references(() => emails.gmail_id, { onDelete: 'cascade' }),
   title: text("title").notNull(),
   status: text("status").notNull(), // e.g., "Draft Created", "Draft Updated"
+  action_type: text("action_type"), // Track what kind of action generated this draft
   gmail_draft_id: text("gmail_draft_id"),
   created_at: timestamp("created_at").defaultNow(),
 });

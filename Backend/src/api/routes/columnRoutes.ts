@@ -185,9 +185,11 @@ router.get('/with-tasks', auth, async (
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required', isSuccess: false });
     }
-    // // Use the new function that filters by user ID at the database level
-    const columnsWithTasks = await columnRepository.getColumnsWithTasksByUserId(req.user.id);
+    // let's console.log tasks here
+    const columnsWithTasks = await columnRepository.getColumnsWithTasksByUserId(userId);
 
+    // Debug logging
+    console.log('Columns count:', columnsWithTasks.length);
     //console.log(JSON.stringify(columnsWithTasks))
     
     res.json({

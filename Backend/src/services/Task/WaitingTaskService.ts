@@ -3,7 +3,6 @@ import { waitingTasks, tasks, followUpEmails, emails, emailAccounts, taskNotes, 
 import { AgentService } from '../Agent/AgentService';
 import { LLMService } from '../LLMService';
 import { getWaitingTaskActionPrompt } from '../../utils/prompts';
-import { DraftActions } from '../Google/Actions/draft';
 import { db } from '../../db';
 import { EmailUtils } from '../Google/emailUtils';
 
@@ -55,6 +54,24 @@ export class WaitingTaskService {
             }
         });
 
+        // Fetch email thread if available
+        let emailThreadContext = undefined;
+        if (waitingTaskWithTask.task.thread_id && waitingTaskWithTask.task.email_id) {
+            const emailThread = await this.getEmailThread(waitingTaskWithTask.task.thread_id);
+            if (emailThread) {
+                emailThreadContext = {
+                    messages: emailThread.messages.map(msg => ({
+                        sender: msg.headers.from,
+                        recipient: msg.headers.to,
+                        subject: msg.headers.subject,
+                        content: msg.body,
+                        timestamp: msg.headers.date
+                    })),
+                    last_response_time: emailThread.messages[emailThread.messages.length - 1]?.headers.date
+                };
+            }
+        }
+
         //console.log("Waiting task with task", JSON.stringify(waitingTaskWithTask));
 
         if (!waitingTaskWithTask) {
@@ -76,17 +93,21 @@ export class WaitingTaskService {
             ? taskNotesResult.map(note => note.text).join('\n\n')
             : '';
 
+        
+
         // Create a prompt for the LLM to determine the next action
         const prompt = getWaitingTaskActionPrompt({
             task: {
                 title: task.title,
                 description: task.description || '',
                 priority: task.priority || 'medium',
-                due_date: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : undefined
+                due_date: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : undefined,
+                task_type: task.category as 'approval' | 'information' | 'action' | 'deadline' | 'other'
             },
             waiting_for: waiting_for || '',
             waiting_time: waiting_time,
-            notes: notesText // Add notes as additional context
+            notes: notesText,
+            email_thread: emailThreadContext
         });
 
         try {
@@ -103,7 +124,7 @@ export class WaitingTaskService {
      */
     async processWaitingTask(waitingTaskId: number) {
         const nextAction = await this.determineNextAction(waitingTaskId);
-        
+        console.log('Next action:', nextAction);
         if (!nextAction) {
             console.error(`Failed to determine next action for waiting task ${waitingTaskId}`);
             return false;
@@ -126,12 +147,16 @@ export class WaitingTaskService {
 
         // Take action based on LLM recommendation
         switch (nextAction.action) {
-            case 'follow_up_email':
-                // Generate a follow-up email draft
+            case 'send_followup':
+            case 'send_final_notice':
+            case 'suggest_alternative':
+            case 'schedule_meeting':
+                // Generate an email draft based on action type
+                console.log('Generating draft for action:', nextAction.action);
                 if (task.thread_id && task.email_id) {
                     // Get the email thread
                     const emailThread = await this.getEmailThread(task.thread_id);
-                    
+                    console.log('Email thread:', emailThread);
                     if (emailThread) {
                         // Get the user's name for the email signature
                         const user = await this.database.query.users.findFirst({
@@ -149,7 +174,8 @@ export class WaitingTaskService {
                         const draft = await this.agentService.generateDraft(
                             emailThread, 
                             recipient, 
-                            user?.name
+                            user?.name,
+                            nextAction.action  // Pass the action type directly
                         );
                         
                         if (draft) {
@@ -159,7 +185,10 @@ export class WaitingTaskService {
                                 email_subject: draft.subject,
                                 email_content: draft.body,
                                 recipient: draft.to,
-                                status: 'drafted'
+                                status: 'drafted',
+                                action_type: nextAction.action,
+                                is_final_notice: nextAction.action === 'send_final_notice',
+                                suggested_meeting_times: nextAction.action === 'schedule_meeting' ? nextAction.suggested_times : null
                             }).returning();
                             
                             // Get the user's email account for analytics
@@ -173,17 +202,19 @@ export class WaitingTaskService {
                             // Also save to draft_activities table for analytics
                             await this.database.insert(draftActivities).values({
                                 user_id: task.user_id,
-                                account_id: emailAccount ? emailAccount.id : 0, // Fallback if no account found
+                                account_id: emailAccount ? emailAccount.id : 0,
                                 email_id: task.email_id,
                                 title: draft.subject,
-                                status: 'drafted'
+                                status: 'drafted',
+                                action_type: nextAction.action
                             });
                             
-                            // Update the waiting task to mark reminder as sent
+                            // Update waiting task
                             await this.database.update(waitingTasks)
                                 .set({
                                     reminder_sent: true,
-                                    last_reminder_date: new Date()
+                                    last_reminder_date: new Date(),
+                                    last_action_type: nextAction.action
                                 })
                                 .where(eq(waitingTasks.task_id, task.id));
                             
@@ -192,7 +223,16 @@ export class WaitingTaskService {
                     }
                 }
                 return false;
-                
+
+            case 'schedule_meeting':
+                // Currently handled through email draft generation above
+                // TODO: Future enhancement - Implement direct calendar integration:
+                // 1. Check calendar availability
+                // 2. Create calendar events
+                // 3. Send calendar invites
+                console.log(`Meeting scheduling suggested for task ${task.id}`);
+                return true;
+
             case 'escalate':
                 // Update task priority to high if it's not already
                 if (task.priority !== 'high' && task.priority !== 'urgent') {
@@ -206,16 +246,19 @@ export class WaitingTaskService {
                 return true;
 
             case 'continue_waiting':
-                // No action needed
+                // No action needed, but log the reason
+                console.log(`Continuing to wait on task ${task.id}: ${nextAction.reason}`);
                 return true;
                 
-            case 'close_task':
-                // Move the task to the Completed column
+            case 'close_as_complete':
+            case 'close_as_obsolete':
+                // Move the task to the appropriate column
                 await this.database.update(tasks)
                     .set({
                         column_id: 4, // Assuming column_id 4 is the "Completed" column
-                        status: 'Completed',
-                        updated_at: new Date()
+                        status: nextAction.action === 'close_as_complete' ? 'Completed' : 'Obsolete',
+                        updated_at: new Date(),
+                        completion_reason: nextAction.action === 'close_as_complete' ? 'task_completed' : 'task_obsolete'
                     })
                     .where(eq(tasks.id, task.id));
                 
