@@ -13,6 +13,40 @@ export async function setupWatchRenewal() {
     let successCount = 0;
     let failureCount = 0;
     
+    // If we have no accounts, just return
+    if (accounts.length === 0) {
+        console.log('No Google accounts found for watch renewal');
+        return;
+    }
+    
+    // Stop all watches first to avoid "Only one user push notification client allowed per developer" error
+    try {
+        // Use the first account to stop all watches
+        const firstAccount = accounts[0];
+        if (firstAccount.tokens && firstAccount.tokens.refresh_token) {
+            const googleService = new GoogleService(
+                firstAccount.tokens.access_token,
+                firstAccount.tokens.refresh_token,
+                firstAccount.id.toString()
+            );
+            
+            // Ensure token is valid
+            await googleService.ensureValidToken();
+            
+            // Stop all watches before proceeding
+            console.log('Stopping all Gmail watches before renewal...');
+            await googleService.removeWebhook();
+            
+            // Add a delay to ensure Google's systems register the stop
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            console.log('All watches stopped, proceeding with renewal');
+        }
+    } catch (error) {
+        console.error('Error stopping watches:', error);
+        // Continue anyway, as individual accounts will retry
+    }
+    
+    // Now process accounts in parallel
     await Promise.all(accounts.map(async (account) => {
         try {
             // Check if tokens exist and are valid
@@ -47,7 +81,7 @@ export async function setupWatchRenewal() {
                 return;
             }
 
-            // Renew the watch subscription
+            // Renew the watch subscription with retry mechanism
             try {
                 const result = await googleService.renewWatchSubscription(account.email_address);
                 console.log(`Watch renewed for account ${account.email_address} until ${new Date(Number(result.expiration)).toISOString()}`);

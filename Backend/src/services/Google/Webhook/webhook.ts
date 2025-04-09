@@ -11,6 +11,9 @@ export class WebhookActions extends GoogleClient {
             // Ensure token is valid before making API calls
             await this.ensureValidToken();
             
+            // Stop all watches before initializing
+            await this.stopAllWatches();
+            
             // Get initial historyId
             const profile = await this.gmail.users.getProfile({
                 userId: 'me'
@@ -18,10 +21,6 @@ export class WebhookActions extends GoogleClient {
 
             const initialHistoryId = profile.data.historyId;
             console.log('Initial History ID:', initialHistoryId);
-
-            // Stop previous watch to avoid duplicate push notifications
-            await this.gmail.users.stop({ userId: "me" });
-            console.log("✅ Stopped previous Gmail watch.");
 
             console.log("🔁 Setting up Gmail watch...");
             console.log("🔁 Label IDs: 'INBOX'");
@@ -55,8 +54,8 @@ export class WebhookActions extends GoogleClient {
         try {
             console.log(`Renewing watch subscription for ${emailAddress}`);
             
-            // Stop previous watch to avoid duplicate push notifications
-            await this.gmail.users.stop({ userId: "me" });
+            // Stop all watches before renewing
+            await this.stopAllWatches();
             
             // Set up watch again
             const response = await this.gmail.users.watch({
@@ -94,6 +93,37 @@ export class WebhookActions extends GoogleClient {
         }
     }
 
+    /**
+     * Stops all active Gmail watch subscriptions
+     * This should be called before setting up new watches to avoid the
+     * "Only one user push notification client allowed per developer" error
+     */
+    public async stopAllWatches() {
+        try {
+            // Ensure token is valid before making API calls
+            await this.ensureValidToken();
+            
+            console.log("Stopping all Gmail watches...");
+            await this.gmail.users.stop({ userId: "me" });
+            console.log("✅ Stopped all Gmail watches successfully");
+            
+            // Add a small delay to ensure Google's systems register the stop
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            return true;
+        } catch (error) {
+            // If the error is that there's no watch to stop, that's actually fine
+            if (error instanceof Error && 
+                (error.message.includes('No push notification exists') || 
+                 error.message.includes('Push notification not found'))) {
+                console.log("No active Gmail watch to stop");
+                return true;
+            }
+            
+            console.error('Error stopping Gmail watches:', error);
+            throw error;
+        }
+    }
 
     /**
      * Removes the webhook subscription

@@ -52,6 +52,15 @@ export class  GoogleService {
     public async removeWebhook() {
         return this.webhookActions.removeWebhook();
     }
+    
+    /**
+     * Stops all active Gmail watch subscriptions
+     * This should be called before setting up new watches to avoid the
+     * "Only one user push notification client allowed per developer" error
+     */
+    public async stopAllWatches() {
+        return this.webhookActions.stopAllWatches();
+    }
 
     // Expose methods from history actions
     public async getLatestHistoryId(): Promise<string> {
