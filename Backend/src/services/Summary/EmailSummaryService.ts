@@ -292,6 +292,9 @@ export class EmailSummaryService {
     try {
       // Get user's timezone
       const userTimezone = await this.getUserTimezone(tx, userId);
+       // Add timezone debugging information
+
+    console.log("[TIMEZONE DEBUG] Current user timezone:", userTimezone);
 
       // Use tx directly instead of going through the repository
       const result = await tx.select()

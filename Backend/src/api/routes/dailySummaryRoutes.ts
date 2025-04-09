@@ -501,10 +501,17 @@ router.get('/fetch', auth, async (
     const period = (req.query.period as 'morning' | 'evening') || 'morning';
     console.log("Period at the backend: ", period);
 
+    // Add timezone debugging information
+    console.log("[TIMEZONE DEBUG] System timezone:", Intl.DateTimeFormat().resolvedOptions().timeZone);
+    console.log("[TIMEZONE DEBUG] Current server time:", new Date().toISOString());
+    console.log("[TIMEZONE DEBUG] Current server time (local):", new Date().toString());
+    
     // Use local date formatting instead of UTC
     const request_date = req.query.date?.toString() || 
       new Date().toLocaleDateString('en-CA'); // formats as YYYY-MM-DD in local timezone
     console.log("Date at the backend: ", request_date);
+    console.log("[TIMEZONE DEBUG] Parsed request date:", new Date(request_date).toISOString());
+    
     // Validate period
     if (period !== 'morning' && period !== 'evening') {
       return res.status(400).json({ 
