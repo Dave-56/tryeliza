@@ -505,12 +505,31 @@ router.get('/fetch', auth, async (
     console.log("[TIMEZONE DEBUG] System timezone:", Intl.DateTimeFormat().resolvedOptions().timeZone);
     console.log("[TIMEZONE DEBUG] Current server time:", new Date().toISOString());
     console.log("[TIMEZONE DEBUG] Current server time (local):", new Date().toString());
+
+    // Get the user's timezone from the database or request, or default to system timezone
+    const userTimezone = await db.transaction(async (tx) => {
+      return await schedulerService.emailSummaryService.getUserTimezone(tx, req.user.id);
+    });
+    console.log("[TIMEZONE DEBUG] User timezone for request:", userTimezone);
     
-    // Use local date formatting instead of UTC
-    const request_date = req.query.date?.toString() || 
-      new Date().toLocaleDateString('en-CA'); // formats as YYYY-MM-DD in local timezone
-    console.log("Date at the backend: ", request_date);
-    console.log("[TIMEZONE DEBUG] Parsed request date:", new Date(request_date).toISOString());
+    // Use timezone-aware date formatting instead of local date
+    let request_date;
+    if (req.query.date) {
+      // If date is provided in query, use it directly
+      request_date = req.query.date.toString();
+    } else {
+      // Otherwise, create a date string in the user's timezone
+      const now = new Date();
+      request_date = new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        timeZone: userTimezone
+      }).format(now).replace(/\//g, '-');
+    }
+    
+    console.log("[TIMEZONE DEBUG] Date at the backend:", request_date);
+    console.log("[TIMEZONE DEBUG] User timezone:", userTimezone);
     
     // Validate period
     if (period !== 'morning' && period !== 'evening') {

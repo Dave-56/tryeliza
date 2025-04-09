@@ -370,7 +370,7 @@ export class EmailSummaryService {
     }
   }
 
-  private async getUserTimezone(tx: any, userId: string): Promise<string> {
+  public async getUserTimezone(tx: any, userId: string): Promise<string> {
     const user = await tx.query.users.findFirst({
       where: eq(users.id, userId),
       columns: { timezone: true }
