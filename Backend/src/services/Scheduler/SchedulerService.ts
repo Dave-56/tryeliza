@@ -3,13 +3,16 @@ import { db } from '../../db/index';
 import { eq, and } from 'drizzle-orm';
 import { users } from '../../db/schema.js';
 import { EmailSummaryService } from '../Summary/EmailSummaryService.js';
+import { AgentService } from '../Agent/AgentService.js';
 
 export class SchedulerService {
   public emailSummaryService: EmailSummaryService;
+  private agentService: AgentService;
   private activeJobs: Map<string, cron.ScheduledTask>;
 
-  constructor() {
-    this.emailSummaryService = new EmailSummaryService();
+  constructor(agentService: AgentService) {
+    this.agentService = agentService;
+    this.emailSummaryService = new EmailSummaryService(agentService);
     this.activeJobs = new Map();
   }
 

@@ -62,6 +62,12 @@ export type Integration = {
     isActive: boolean;
 }
 
+
+export interface ExtractedTask {
+    has_task: boolean;
+    task_priority: string;
+}
+
 export interface EmailThread {
     id: string;
     messages: EmailMessage[];
@@ -69,6 +75,8 @@ export interface EmailThread {
     _splitPart?: number;
     category?: string;
     confidence?: number;
+    is_duplicate_of?: string; // Reference to original thread if duplicate
+    extractedTask?: ExtractedTask;
 }
 
 export interface EmailMessage {
@@ -79,7 +87,7 @@ export interface EmailMessage {
     historyId?: string;
     internalDate?: string;
     headers: EmailHeaders;
-    body: string;
+    body?: string;
     htmlBody?: string;
     task?: Task;  // Optional task associated with this email
 }
@@ -87,7 +95,7 @@ export interface EmailMessage {
 export interface EmailHeaders {
     subject: string;
     from: string;
-    to: string;
+    to?: string;
     date: string;
 }
 

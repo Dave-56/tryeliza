@@ -9,6 +9,7 @@ import { AnalyticsPanel } from "@/components/analytics-panel";
 import { Sidebar } from "@/components/sidebar";
 import { SettingsPanel } from "@/components/settings-panel";
 import { EmailDigest } from "@/components/email-digest";
+import { EmailPulse } from "@/components/email-pulse";
 import ResetPassword from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
 import Privacy from "@/pages/privacy";
@@ -40,8 +41,8 @@ function Router() {
 
   // Sync activeTab with current location
   useEffect(() => {
-    if (location === '/') {
-      setActiveTab('inbox');
+    if (location === '/' || location === '/email-digest') {
+      setActiveTab('email-digest');
     } else if (location === '/workflow') {
       setActiveTab('workflow');
     } else if (location === '/analytics') {
@@ -78,8 +79,11 @@ function Router() {
       <div className="flex-1 overflow-auto">
         <NavBar />
         <Switch>
+          <Route path="/email-digest">
+            <EmailPulse onTabChange={setActiveTab} />
+          </Route>
           <Route path="/">
-            <EmailDigest onTabChange={setActiveTab} />
+            <EmailPulse onTabChange={setActiveTab} />
           </Route>
           <Route path="/workflow">
             <WorkflowPage onTabChange={setActiveTab} />

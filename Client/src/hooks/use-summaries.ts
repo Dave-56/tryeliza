@@ -2,16 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client';
 import { BackendResponse } from '../types/model';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
 import { enUS, enGB, enAU, enCA, enNZ } from 'date-fns/locale';
 import { format, parseISO } from 'date-fns';
 import { 
-  DailySummaryResponse, 
-  EmailDigestResponse, 
-  CategorySummary
+  EmailSummary,
+  InboxSummaryResponse // Import InboxSummaryResponse type
 } from '../types/email-digest';
 import { useEmailAccounts } from '@/hooks/use-email'; // Import useEmailAccounts hook
 import { useState } from 'react'; // Import useState hook
+import { useToast } from '@/hooks/use-toast'; // Import useToast hook
 
 // Helper function to determine the appropriate locale
 function getAppropriateLocale() {
@@ -31,39 +30,31 @@ function getAppropriateLocale() {
   }
 }
 
-// Utility function to format UTC dates to local timezone
 export function formatUTCToLocal(utcDateString: string): string {
   if (!utcDateString) return '';
   
   try {
-     // Check if the string is already in a formatted date pattern (e.g., "Mar 11, 2025 12:42 PM")
-     if (utcDateString.match(/[a-zA-Z]{3}\s\d{1,2},\s\d{4}\s\d{1,2}:\d{2}\s[AP]M/)) {
-      return utcDateString; // Already formatted, return as is
+    if (utcDateString.match(/[a-zA-Z]{3}\s\d{1,2},\s\d{4}\s\d{1,2}:\d{2}\s[AP]M/)) {
+      return utcDateString;
     }
-    // Ensure the date string is in UTC format by appending 'Z' if it's not already there
-    // and doesn't contain timezone info
     let utcString = utcDateString;
     if (!utcDateString.endsWith('Z') && !utcDateString.includes('+') && !utcDateString.includes('T')) {
       utcString = `${utcDateString}Z`;
     }
     
-    // Parse the ISO string to a Date object (now properly treated as UTC)
     const date = parseISO(utcString);
     
-    // Check if the date is valid
     if (isNaN(date.getTime())) {
       console.error('Invalid date string:', utcDateString);
       return 'Invalid date';
     }
     
-    // Get the user's locale
-    const locale = getAppropriateLocale();
-    
-    // Format the date using date-fns with the appropriate locale
+    const locale = getAppropriateLocale(); 
+
     return format(date, 'MMM d, yyyy h:mm a', { locale });
   } catch (error) {
     console.error('Error formatting date:', error);
-    return utcDateString; // Return the original string if there's an error
+    return utcDateString; 
   }
 }
 
@@ -75,24 +66,41 @@ export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?:
   const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive) ?? false;
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { data, isLoading, error, refetch, isFetching } = useQuery<BackendResponse<DailySummaryResponse>, Error, EmailDigestResponse>({
+  const { data, isLoading, error, refetch, isFetching } = useQuery<InboxSummaryResponse>({
     queryKey: ['email-digest', period, date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')],
     queryFn: async () => {
       const queryDate = date || new Date();
       const formattedDate = format(queryDate, 'yyyy-MM-dd');
-      
+      console.log('Query date:', formattedDate);
+            
       setIsSyncing(true);
       try {
-        const url = `/api/daily-summaries?period=${period}&date=${formattedDate}`;
-        const response = await apiClient.fetchWithAuth<DailySummaryResponse>(url);
-        return response;
-      } finally {
-        // Set syncing to false after response is received
+        //const url = `/api/daily-summaries?period=${period}&date=${formattedDate}`;
+        const url = `/api/daily-summaries/fetch?period=${period}${date ? `&date=${formattedDate}` : ''}`;
+        const response = await apiClient.fetchWithAuth<BackendResponse>(url);
+        console.log('API response:', response);
+
+        if (!response.data) {
+          throw new Error('Invalid response from server');
+        }
+        return {
+          data: {
+            message: response.data.message,
+            summary: {
+              ...response.data.summary,
+              period,
+              status: 'completed',
+              last_run_at: response.data.summary.last_run_at || null
+            }
+          },
+          lastUpdated: response.data.summary.updated_at || new Date().toISOString(),
+          isSuccess: response.isSuccess
+        };
+      } finally {     
         setIsSyncing(false);
       }
     },
-    select: (response) => transformDailySummaryToDigest(response),
-    enabled: !isLoadingEmailAccounts
+    //select: (response) => transformDailySummaryToDigest(response),    enabled: !isLoadingEmailAccounts
   });
 
   return {
@@ -105,56 +113,43 @@ export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?:
   };
 }
 
-// Interface for trigger endpoint response
-interface TriggerSummaryResponse {
-  message: string;
-}
-
-export function useTriggerSummary() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+// Hook to generate a new summary
+export function useGenerateSummary() {
   const { data: emailAccounts } = useEmailAccounts();
   const isGmailConnected = emailAccounts?.some(account => account.provider === 'google' && account.isActive);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  return useMutation<
-    { data: TriggerSummaryResponse; period: 'morning' | 'evening' },
-    Error,
-    'morning' | 'evening'
-  >({
-    mutationFn: async (period: 'morning' | 'evening' = 'evening') => {
-      if (!apiClient.isAuthenticated()) {
-        throw new Error('User not authenticated');
-      }
-
+  return useMutation({
+    mutationFn: async ({ period, date }: { period: 'morning' | 'evening', date?: Date | null }) => {
       if (!isGmailConnected) {
-        throw new Error('Please connect your Gmail account to generate smart summaries');
+        throw new Error('Please connect your Gmail account to generate summaries');
       }
-      console.log("Period from frontend mutation: ", period);
-      const response = await apiClient.fetchWithAuth<TriggerSummaryResponse>('/api/daily-summaries/trigger', {
-        method: 'POST',
-        body: JSON.stringify({ period }),
+
+      const queryDate = date || new Date();
+      const formattedDate = format(queryDate, 'yyyy-MM-dd');
+      const url = `/api/daily-summaries/generate?period=${period}${date ? `&date=${formattedDate}` : ''}`;
+      
+      const response = await apiClient.fetchWithAuth<BackendResponse<{ message: string }>>(url, {
+        method: 'POST'
       });
       
-      // Ensure data is not undefined, throw an error if it is
       if (!response.data) {
-        throw new Error('No data returned from the server');
+        throw new Error('Failed to generate summary');
       }
       
-      return { data: response.data, period };
+      return { ...response.data, period, date };
     },
-    onSuccess: (result) => {
-      // Invalidate and force refetch email digest data after successful trigger
-      const period = result.period;
-      queryClient.invalidateQueries({ queryKey: ['email-digest', period] });
-       // Force an immediate refetch to get the latest data
-       queryClient.refetchQueries({ queryKey: ['email-digest', period], exact: true });
-       // Also invalidate any other related queries
-       queryClient.invalidateQueries({ queryKey: ['email-digest'] });
-      
+    onSuccess: (response) => {
+      // Show success toast
       toast({
         title: "Success",
-        description: "Summary generation completed successfully",
+        description: response.data?.message || "Summary generated successfully",
       });
+
+      // Invalidate and refetch the email digest query
+      const queryKey = ['email-digest', response.period, response.date ? format(response.date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')];
+      queryClient.invalidateQueries({ queryKey });
     },
     onError: (error) => {
       toast({
@@ -165,74 +160,3 @@ export function useTriggerSummary() {
     }
   });
 }
-
-// Transform backend response to match frontend expectations
-function transformDailySummaryToDigest(response: BackendResponse<DailySummaryResponse>): EmailDigestResponse {
-  // Log the raw response from the backend for debugging
-  // console.log('Raw backend response:', response);
-  
-  if (!response.data?.categoriesSummary || !response.isSuccess) {
-      console.log('No categories summary found or request not successful');
-      console.log('Response data:', response.data);
-      // console.log('Response success:', response.isSuccess);
-      console.log('Response lastUpdated:', response.data?.lastUpdated);
-      return {
-        connected: false,
-        message: response.error || 'Failed to fetch email digest',
-        categories: [],
-        lastUpdated: response.data?.lastUpdated || new Date().toISOString()
-      };
-    }
-    
-    // Only format lastUpdated for UI display
-    const lastUpdatedTime = response.data?.lastUpdated;
-    const formattedLastUpdated = formatUTCToLocal(lastUpdatedTime);
-    console.log('After formatting lastUpdated:', formattedLastUpdated);
-    
-    // Log the full response structure to debug
-    console.log('Full response structure:', JSON.stringify(response.data, null, 2));
-    
-    // Map the backend structure to the frontend expected structure
-    const categoryMap = new Map<string, any[]>();
-    
-    // First, group all summaries by category
-    if (response.data?.categoriesSummary) {
-      response.data.categoriesSummary.forEach(cat => {
-        const categoryName = cat.title || 'Uncategorized';
-        const existingSummaries = categoryMap.get(categoryName) || [];
-        const newSummaries = (cat.summaries || []).map(item => ({
-          title: item.title || item.subject || 'No Subject',
-          subject: item.subject || 'No Subject',
-          headline: item.headline || '',
-          gmail_id: item.gmail_id || '',
-          receivedAt: formatUTCToLocal(item.receivedAt || new Date().toISOString()),
-          sender: item.sender || '',
-          is_processed: item.is_processed || false,
-          priority_score: item.priority_score,
-          insights: item.insights
-        }));
-        categoryMap.set(categoryName, [...existingSummaries, ...newSummaries]);
-      });
-    }
-
-    // Then convert the map to our CategorySummary array
-    const categories: CategorySummary[] = Array.from(categoryMap.entries()).map(([categoryName, summaries]) => ({
-      category: categoryName,
-      count: summaries.length,
-      summaries,
-      summary: `${summaries.length} email${summaries.length === 1 ? '' : 's'} in ${categoryName}`,
-      isExpanded: false // Add the isExpanded field
-    }));
-    
-    // Create the result object with only lastUpdated for UI
-    const result = {
-      connected: true,
-      categories: categories.sort((a, b) => b.summaries.length - a.summaries.length),
-      // If there are no categories, set lastUpdated to indicate data is not available
-      lastUpdated: categories.length === 0 
-        ? "Not available" 
-        : `FIXED_DATE_VALUE||${lastUpdatedTime}||${formattedLastUpdated}`,
-      currentServerTime: response.data?.currentServerTime
-    };
-    return result;
-  }

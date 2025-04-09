@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/hooks/use-user";
 import { useLocation } from "wouter";
 import { useEmailAccounts, useManualSync } from "@/hooks/use-email";
-import { useEmailDigest, useTriggerSummary, formatUTCToLocal } from "@/hooks/use-summaries";
+import { useEmailDigest, formatUTCToLocal } from "@/hooks/use-summaries";
 import { CATEGORY_ORDER, CATEGORY_CONFIG } from "@/constants/email-categories";
 import { 
   EmailSummary, 
@@ -343,7 +343,7 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   useScheduledRefetch();
 
   // Get the trigger summary mutation
-  const { mutate: triggerSummary, isPending: isGenerating } = useTriggerSummary();
+  // const { mutate: triggerSummary, isPending: isGenerating } = useTriggerSummary();
 
   // Handle date selection
   const handleDateSelect = (date: Date | null) => {
@@ -363,16 +363,16 @@ export function EmailDigest({ onTabChange }: EmailDigestProps) {
   };
 
   // Add this hook for manual triggering
-  const handleGenerateSummary = () => {
-    triggerSummary(timeOfDay, {
-      onSuccess: () => {
-        // Force a refetch after the summary is generated
-        setTimeout(() => {
-          refetch();
-        }, 1000); // Add a slight delay to ensure the backend has processed the summary
-      }
-    });
-  };
+  // const handleGenerateSummary = () => {
+  //   triggerSummary(timeOfDay, {
+  //     onSuccess: () => {
+  //       // Force a refetch after the summary is generated
+  //       setTimeout(() => {
+  //         refetch();
+  //       }, 1000); // Add a slight delay to ensure the backend has processed the summary
+  //     }
+  //   });
+  // };
 
   const handleTimeOfDayChange = (newTimeOfDay: 'morning' | 'evening') => {
     setTimeOfDay(newTimeOfDay);

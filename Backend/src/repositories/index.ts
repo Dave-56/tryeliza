@@ -11,6 +11,7 @@ export * from './DailySummaryRepository';
 export * from './TaskNoteRepository';
 export * from './AnalyticsRepository';
 export * from './FollowUpEmailRepository';
+export * from './CategorizedDailySummaryRepository';
 
 
 // Repository instances
@@ -25,6 +26,7 @@ import { DailySummaryRepository } from './DailySummaryRepository';
 import { TaskNoteRepository } from './TaskNoteRepository';
 import { AnalyticsRepository } from './AnalyticsRepository';
 import { FollowUpEmailRepository } from './FollowUpEmailRepository';
+import { CategorizedDailySummaryRepository } from './CategorizedDailySummaryRepository';
 
 // Create singleton instances
 export const userRepository = new UserRepository();
@@ -38,3 +40,4 @@ export const dailySummaryRepository = new DailySummaryRepository();
 export const taskNoteRepository = new TaskNoteRepository();
 export const analyticsRepository = new AnalyticsRepository();
 export const followUpEmailRepository = new FollowUpEmailRepository();
+export const categorizedDailySummaryRepository = new CategorizedDailySummaryRepository();

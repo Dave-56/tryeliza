@@ -59,8 +59,14 @@ export class LLMService {
     switch(responseType) {
       case 'summary':
         systemContent = `You are a helpful assistant that always responds with valid JSON.
-          Your response must be a properly formatted JSON object with a 'summaries' array.
-          Each summary in the array must have category, title, description, messageId, priority, timeframe, and confidence fields.`;
+          Your response must be a properly formatted JSON object with key_highlights and category_name fields.`;
+        break;
+      case 'categorization':
+        systemContent = `You are an AI assistant specialized in email intelligence.
+          Your response must be a valid JSON object with a 'categories' array.
+          Each category must have 'name' and 'threads' fields.
+          Category names must be one of: Important Info, Calendar, Payments, Travel, Newsletters, or Notifications.
+          Each thread must have id, subject, and messages array.`;
         break;
       case 'taskExtraction':
         systemContent = `You are a helpful assistant that always responds with valid JSON.
@@ -223,6 +229,8 @@ export class LLMService {
                 body: "", 
                 to: "" 
               };
+            case 'categorization':
+              return { categories: [] };
             default:
               return {};
           }

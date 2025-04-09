@@ -1,13 +1,4 @@
-import { EmailThread } from '../../Types/model';
-
-// Define valid email categories
-export type EmailCategory = 
-  | "Important Info"
-  | "Calendar"
-  | "Payments"
-  | "Travel"
-  | "Newsletters"
-  | "Notifications";
+import { EmailThread } from '../Types/model';
 
 export interface ThreadCategorizationParams {
     threads: EmailThread[];
@@ -16,7 +7,7 @@ export interface ThreadCategorizationParams {
 
 export interface ThreadCategorizationResult {
     categories: {
-        name: EmailCategory;  
+        name: string;  // e.g., "Important Info", "Calendar", etc.
         threads: {
             id: string;
             subject?: string;
@@ -41,9 +32,9 @@ export interface ThreadCategorizationResult {
 
 // Takes a single category from ThreadCategorizationResult
 export interface ThreadSummarizationParams {
-    category_name: EmailCategory;  
+    category_name: string;  // matches a category.name from ThreadCategorizationResult
     category_threads: {
-        id: string;  
+        thread_id: string;  
         subject?: string;
         is_duplicate_of?: string | null;  
         messages: {
@@ -51,7 +42,7 @@ export interface ThreadSummarizationParams {
             from: string;  
             to: string;    
             date: string;  
-            body: string;  
+            content: string;  
         }[];
         extractedTask?: {
             has_task: boolean;
@@ -61,20 +52,7 @@ export interface ThreadSummarizationParams {
     currentDate: string;
 }
 
-// Alternative interface for single thread summarization
-export interface ThreadSummarizationParamsAlternative {
-    threads: EmailThread[];
-    currentDate: string;
-}
-
-export interface ThreadSummarizationResultAlternative {
-    threads: Array<{
-        id: string;
-        summary: string;
-    }>;
-}
-
 export interface ThreadSummarizationResult {
     key_highlights: string; 
-    category_name: EmailCategory;  
+    category_name: string;  // Overall category summary
 }

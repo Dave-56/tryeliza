@@ -21,3 +21,9 @@ logs/
 # Drizzle
 .drizzle/
 .vercel
+
+# Ignore legacy VCS folders
+.bzr/
+.darcs/
+.hg/
+BitKeeper/

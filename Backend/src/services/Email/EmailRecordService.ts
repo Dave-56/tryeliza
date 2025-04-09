@@ -59,9 +59,9 @@ export class EmailRecordService {
     public async createEmailRecord(tx: any, message: any, emailAccount: EmailAccount, emailThread: EmailThread) {
         try {
             // Clean the message body and snippet
-            if (message.body) {
-                message.body = cleanEmailText(message.body);
-            }
+            // if (message.body) {
+            //     message.body = cleanEmailText(message.body);
+            // }
             if (message.snippet) {
                 message.snippet = cleanEmailText(message.snippet);
             }
@@ -72,7 +72,6 @@ export class EmailRecordService {
                 message.headers = {
                     subject: '',
                     from: '',
-                    to: '',
                     date: ''
                 };
             }
@@ -102,7 +101,6 @@ export class EmailRecordService {
                     category: 'Inbox', // Default category
                     metadata: {
                         threadId: message.threadId || emailThread.id,
-                        labelIds: message.labelIds || [],
                         snippet: message.snippet || '',
                         historyId: message.historyId || '',
                         internalDate: message.internalDate || ''
@@ -206,11 +204,11 @@ export class EmailRecordService {
                     processing_result: {
                         success: true,
                         metadata: {
-                            requires_action: requiresAction
+                            requires_action: requiresAction,
                         }
                     },
                     included_in_summary: requiresAction, // Set to true if this email requires action (i.e., created a task)
-                    summary_period: requiresAction ? summaryPeriod : null, // Set period only if included in summary
+                    summary_period: summaryPeriod, // Set period only if included in summary
                     processed_at: new Date()
                 })
                 .where(and(

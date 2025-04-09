@@ -5,8 +5,10 @@ import { BackendResponse } from '../../Types/model';
 import auth from '../middleware/auth.js';
 import { SchedulerService } from '../../services/Scheduler/SchedulerService.js';
 import { formatForAPI, isValidDateFormat, formatForEmailSummary } from '../../utils/dateUtils.js';
+import { db } from '../../db/index.js'; // Assuming db is the database connection
+import { AgentService } from '../../services/Agent/AgentService.js';
 
-const schedulerService = new SchedulerService();
+const schedulerService = new SchedulerService(new AgentService());
 
 // Helper function to safely format dates
 function formatDate(date: any): string {
@@ -446,14 +448,19 @@ router.get('/range', auth, async (
 });
 
 // Generate new summary, force refresh
-router.post('/trigger', auth, async (
+router.post('/generate', auth, async (
   req: Request, 
   res: Response<BackendResponse<any>>
 ) => {
   try {
     // In production, you might want to restrict this to admin users only
-    const period = (req.body.period as 'morning' | 'evening') || 'morning';
+    const period = (req.query.period as 'morning' | 'evening') || 'morning';
     console.log("Period at the backend: ", period);
+
+    // Use local date formatting instead of UTC
+    const request_date = req.query.date?.toString() || 
+      new Date().toLocaleDateString('en-CA'); // formats as YYYY-MM-DD in local timezone
+    console.log("Date at the backend: ", request_date);
     // Validate period
     if (period !== 'morning' && period !== 'evening') {
       return res.status(400).json({ 
@@ -473,6 +480,52 @@ router.post('/trigger', auth, async (
     return res.json({
       data: { 
         message: `${period} summary generation completed for your account`,
+      },
+      isSuccess: true
+    });
+  } catch (error) {
+    console.error('Error triggering summary generation:', error);
+    return res.status(500).json({ 
+      error: 'Failed to trigger summary generation', 
+      isSuccess: false 
+    });
+  }
+});
+
+// fetch existing summary - Test 
+router.get('/fetch', auth, async (
+  req: Request, 
+  res: Response<BackendResponse<any>>
+) => {
+  try {
+    const period = (req.query.period as 'morning' | 'evening') || 'morning';
+    console.log("Period at the backend: ", period);
+
+    // Use local date formatting instead of UTC
+    const request_date = req.query.date?.toString() || 
+      new Date().toLocaleDateString('en-CA'); // formats as YYYY-MM-DD in local timezone
+    console.log("Date at the backend: ", request_date);
+    // Validate period
+    if (period !== 'morning' && period !== 'evening') {
+      return res.status(400).json({ 
+        error: 'Invalid period. Must be "morning" or "evening"', 
+        isSuccess: false 
+      });
+    }
+    
+    const userId = req.user.id;
+
+    console.log(`Manually fetching ${period} summary for user ${userId}`);
+    const summary = await db.transaction(async (tx) => {
+      return await schedulerService.emailSummaryService.findExistingSummary(tx, userId, request_date, period);
+    });
+
+    //console.log("Summary fetched:", summary)
+    
+    return res.json({
+      data: { 
+        message: `${period} summary fetch completed for your account`,
+        summary
       },
       isSuccess: true
     });

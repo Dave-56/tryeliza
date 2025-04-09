@@ -47,9 +47,11 @@ export const FloatingAutoFollowup: FC<FloatingAutoFollowupProps> = ({ taskId }) 
                     Preparing follow-ups...
                   </p>
                 ) : (
-                  <p className="text-sm text-purple-700 flex items-center">
-                    <span className="text-lg font-bold">{draftedEmails.length}</span>
-                    <span>&nbsp;follow-up email{draftedEmails.length !== 1 ? 's' : ''} ready to send</span>
+                  <p className="text-sm text-purple-700">
+                    <span className="inline-flex items-center">
+                      <span className="font-semibold">{draftedEmails.length}</span>
+                      <span className="ml-1">follow-up email{draftedEmails.length !== 1 ? 's' : ''} ready to send</span>
+                    </span>
                   </p>
                 )}
                 <div className="mt-3">

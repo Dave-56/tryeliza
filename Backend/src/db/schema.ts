@@ -253,6 +253,37 @@ export const dailySummaries = pgTable("daily_summaries", {
   };
 });
 
+// Add this with the other table definitions
+export const categorizedDailySummaries = pgTable("categorized_daily_summaries", {
+  // Keep essential metadata fields
+  user_id: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  summary_date: date("summary_date").notNull(),
+  timezone: text("timezone").default('UTC'),
+  period: text("period").notNull().default('morning'),
+  scheduled_time: time("scheduled_time"),
+  last_run_at: timestamp("last_run_at"),
+  error_details: text("error_details"),
+  // Simplified categories_summary to match actual data structure
+  categories_summary: jsonb("categories_summary").$type<{
+    category_name: string;
+    key_highlights: string;
+  }[]>(),
+
+  // New fields for thread tracking
+  total_threads_processed: integer("total_threads_processed").default(0),
+
+  // Keep existing status fields
+  status: text("status").notNull().default('completed'),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow(),
+}, (table) => {
+  return {
+    pk: primaryKey({ columns: [table.user_id, table.summary_date, table.period] })
+  };
+});
+
 //LLM interactions table with correct references
 export const llmInteractions = pgTable("llm_interactions", {
   id: serial("id").primaryKey(),
@@ -485,6 +516,13 @@ export const taskNotesRelations = relations(taskNotes, ({ one }) => ({
   }),
 }));
 
+export const categorizedDailySummariesRelations = relations(categorizedDailySummaries, ({ one }) => ({
+  user: one(users, {
+    fields: [categorizedDailySummaries.user_id],
+    references: [users.id],
+  }),
+}));
+
 // Export schemas - add new ones while keeping existing ones
 export const insertEmailSchema = createInsertSchema(emails);
 export const selectEmailSchema = createSelectSchema(emails);
@@ -514,6 +552,8 @@ export const insertWebhookNotificationSchema = createInsertSchema(webhookNotific
 export const selectWebhookNotificationSchema = createSelectSchema(webhookNotifications);
 export const insertTaskNoteSchema = createInsertSchema(taskNotes);
 export const selectTaskNoteSchema = createSelectSchema(taskNotes);
+export const insertCategorizedDailySummarySchema = createInsertSchema(categorizedDailySummaries);
+export const selectCategorizedDailySummarySchema = createSelectSchema(categorizedDailySummaries);
 
 export type TaskNote = typeof taskNotes.$inferSelect;
 export type InsertTaskNote = typeof taskNotes.$inferInsert;
@@ -555,3 +595,7 @@ export type ProcessedEmail = typeof processedEmails.$inferSelect;
 export type InsertProcessedEmail = typeof processedEmails.$inferInsert;
 export type WebhookNotification = typeof webhookNotifications.$inferSelect;
 export type InsertWebhookNotification = typeof webhookNotifications.$inferInsert;
+export type CategorizedDailySummary = typeof categorizedDailySummaries.$inferSelect;
+export type InsertCategorizedDailySummary = typeof categorizedDailySummaries.$inferInsert;
+export type LLMInteraction = typeof llmInteractions.$inferSelect;
+

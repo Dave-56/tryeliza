@@ -20,11 +20,17 @@ import {
 
 // Define main menu items separately from settings
 const menuItems = [
+  // {
+  //   title: "Inbox Summary",
+  //   icon: <Inbox className="h-4 w-4" />,
+  //   path: "/",
+  //   value: "inbox",
+  // },
   {
-    title: "Inbox Summary",
+    title: "Email Digest",
     icon: <Inbox className="h-4 w-4" />,
-    path: "/",
-    value: "inbox",
+    path: "/email-digest",
+    value: "email-digest",
   },
   {
     title: "Tasks",

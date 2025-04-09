@@ -15,6 +15,7 @@ import { GoogleService } from '../../../services/Google/GoogleService';
 import { OAuth2Client, Credentials } from 'google-auth-library';
 import { processedEmails, emails } from '../../../db/schema';
 import { and, eq } from 'drizzle-orm';
+import { EmailSummaryService } from '../../Summary/EmailSummaryService';
 
 export class WebhookProcessor {
     /**
@@ -34,6 +35,11 @@ export class WebhookProcessor {
         WebhookProcessor.agentService,
         WebhookProcessor.taskService,
         WebhookProcessor.recordService
+    );
+
+    // Create EmailSummaryService with required dependencies
+    private static emailSummaryService = new EmailSummaryService(
+        WebhookProcessor.agentService
     );
     
     public static decodePubSubMessage(data: string): EmailData {
@@ -202,6 +208,9 @@ export class WebhookProcessor {
                             // Use the EmailCategorizationService directly to categorize the email
                             // Pass the current transaction to avoid nested transactions
                             const categorization = await WebhookProcessor.emailCategorizationService.categorizeEmail(account, email);
+
+                            // Use the Email Summarization service to summarize the email
+                            const summary = await WebhookProcessor.emailSummaryService.generateSummary(account, email);
                             
                             // Add the result to our categorizations array
                             categorizations.push(categorization);
@@ -213,12 +222,12 @@ export class WebhookProcessor {
                     }
                     
                     // Mark emails as processed within the same transaction
-                    try {
-                        await WebhookProcessor.markEmailsAsProcessedWithTx(tx, newIncomingEmails, account.user_id);
-                    } catch (markError) {
-                        console.error('Error marking emails as processed:', markError);
-                        // Continue execution so we can still update the historyId later
-                    }
+                    // try {
+                    //     await WebhookProcessor.markEmailsAsProcessedWithTx(tx, newIncomingEmails, account.user_id);
+                    // } catch (markError) {
+                    //     console.error('Error marking emails as processed:', markError);
+                    //     // Continue execution so we can still update the historyId later
+                    // }
                     
                     return categorizations;
                 });

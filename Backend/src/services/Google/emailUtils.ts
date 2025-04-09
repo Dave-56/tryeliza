@@ -1,6 +1,8 @@
 import { gmail_v1 } from 'googleapis';
 import { EmailThread } from '../../Types/model';
 import { GoogleClient } from './GoogleClient';
+import ThreadDebugLogger from '../../utils/ThreadDebugLogger';
+import { cleanEmailText } from '../../utils/utils';
 
 export class EmailUtils extends GoogleClient {
     /**
@@ -20,15 +22,20 @@ export class EmailUtils extends GoogleClient {
             });
             threadMessages = threadResponse.data.messages || [];
 
+            // Get subject from the first message's headers
+            const firstMessage = threadMessages[0];
+            const subject = firstMessage?.payload?.headers?.find(h => h.name === 'Subject')?.value || '';
+
             return {
                 id: threadId!,
-                messages: threadMessages.map(msg => ({
+                subject,  // Add subject at thread level
+                messages: await Promise.all(threadMessages.map(async msg => ({
                     id: msg.id!,
                     snippet: msg.snippet || undefined,
                     labelIds: msg.labelIds || undefined,
                     headers: this.parseHeaders(msg.payload?.headers || []),
-                    body: this.getEmailBody(msg.payload)
-                }))
+                    body: await this.getEmailBody(msg.payload)
+                })))
             };
         } catch (error) {
             console.error('Error getting email details:', error);
@@ -51,41 +58,111 @@ export class EmailUtils extends GoogleClient {
     /**
      * Extracts the email body from the message payload
      */
-    public getEmailBody(payload: gmail_v1.Schema$MessagePart | undefined): string {
-        if (!payload) return '';
+    public async getEmailBody(payload: gmail_v1.Schema$MessagePart | undefined): Promise<string> {
+        if (!payload) {
+            ThreadDebugLogger.log('[Email Debug] No payload provided');
+            return '';
+        }
+
+        // ThreadDebugLogger.log('[Email Debug] Processing payload:', {
+        //     mimeType: payload.mimeType,
+        //     hasBody: !!payload.body,
+        //     bodySize: payload.body?.size,
+        //     hasParts: !!payload.parts,
+        //     partsCount: payload.parts?.length
+        // });
 
         // If the message is simple, get the body directly
         if (payload.body?.data) {
+            // ThreadDebugLogger.log('[Email Debug] Found simple body data');
             const bodyText = Buffer.from(payload.body.data, 'base64').toString();
-            return bodyText;
+            return await cleanEmailText(bodyText);
         }
 
-        // If the message is multipart, recursively get the text part
+        // If the message is multipart, try to get the best content
         if (payload.parts) {
+            // ThreadDebugLogger.log('[Email Debug] Processing multipart message:', {
+            //     parts: payload.parts.map(part => ({
+            //         mimeType: part.mimeType,
+            //         hasBody: !!part.body,
+            //         bodySize: part.body?.size,
+            //         hasParts: !!part.parts
+            //     }))
+            // });
+
+            let htmlContent: string | null = null;
+            let plainTextContent: string | null = null;
+            let maxContentSize = 0;
+
+            // First pass: collect all available content
             for (const part of payload.parts) {
-                if (part.mimeType === 'text/plain' && part.body?.data) {
-                    const plainText = Buffer.from(part.body.data, 'base64').toString();
-                    return plainText;
+                if (part.body?.data) {
+                    const content = Buffer.from(part.body.data, 'base64').toString();
+                    const size = content.length;
+
+                    if (part.mimeType === 'text/plain') {
+                        plainTextContent = content;
+                        // ThreadDebugLogger.log('[Email Debug] Found text/plain content', { 
+                        //     size,
+                        //     content: content.length > 1000 ? 
+                        //         content.substring(0, 1500) + "\n...\n" + content.substring(content.length - 500) : 
+                        //         content 
+                        // });
+                    } else if (part.mimeType === 'text/html') {
+                        htmlContent = content;
+                        // ThreadDebugLogger.log('[Email Debug] Found text/html content', { 
+                        //     size,
+                        //     content: content.length > 1000 ? 
+                        //         content.substring(0, 1500) + "\n...\n" + content.substring(content.length - 500) : 
+                        //         content
+                        // });
+                    }
+
+                    if (size > maxContentSize) {
+                        maxContentSize = size;
+                    }
                 }
-                // Recursively check parts
+
+                // Recursively check nested parts
                 if (part.parts) {
-                    const body = this.getEmailBody(part);
-                    if (body) return body;
+                    // ThreadDebugLogger.log('[Email Debug] Recursing into nested parts');
+                    const nestedContent = await this.getEmailBody(part);
+                    if (nestedContent && nestedContent.length > maxContentSize) {
+                        maxContentSize = nestedContent.length;
+                        htmlContent = nestedContent; // Prefer HTML from nested parts too
+                    }
                 }
             }
+            // For substantial plain text content (>1500 chars), prefer it over HTML
+            if (plainTextContent && plainTextContent.length > 1500) {
+                ThreadDebugLogger.log('[Email Debug] Selected text/plain content', {
+                    reason: 'Substantial plain text available, preferring over HTML',
+                    contentLength: plainTextContent.length,
+                    sample: plainTextContent.substring(0, 50) + '...'
+                });
+                return await this.cleanPlainTextEmail(plainTextContent);
+            }
+            else if(htmlContent) {
+                ThreadDebugLogger.log('[Email Debug] Selected text/html content', {
+                    reason: 'HTML content available',
+                    originalLength: htmlContent.length,
+                    sample: htmlContent.substring(0, 50) + '...'
+                });
+                return await cleanEmailText(htmlContent);
+            }
+            // For short plain text as last resort
+            else if (plainTextContent && plainTextContent.length > 0) {
+                ThreadDebugLogger.log('[Email Debug] Selected short text/plain content', {
+                    reason: 'Only short plain text available',
+                    contentLength: plainTextContent.length,
+                    sample: plainTextContent.substring(0, 50) + '...'
+                });
+                return await this.cleanPlainTextEmail(plainTextContent);
+            }
+
         }
 
-        // If no text/plain part found, try HTML part
-        if (payload.parts) {
-            for (const part of payload.parts) {
-                if (part.mimeType === 'text/html' && part.body?.data) {
-                    const html = Buffer.from(part.body.data, 'base64').toString();
-                    // Basic HTML to text conversion
-                    const plainText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-                    return plainText;
-                }
-            }
-        }
+        ThreadDebugLogger.log('[Email Debug] No usable body content found');
         return '';
     }
 
@@ -93,7 +170,7 @@ export class EmailUtils extends GoogleClient {
      * Extracts the email body from the message payload, preserving HTML formatting
      * This is different from getEmailBody which converts HTML to plain text
      */
-    public getEmailBodyWithHtml(payload: gmail_v1.Schema$MessagePart | undefined): string {
+    public async getEmailBodyWithHtml(payload: gmail_v1.Schema$MessagePart | undefined): Promise<string> {
         if (!payload) return '';
 
         // If the message is simple, get the body directly
@@ -110,7 +187,7 @@ export class EmailUtils extends GoogleClient {
                 }
                 // Recursively check parts
                 if (part.parts) {
-                    const htmlBody = this.getEmailBodyWithHtml(part);
+                    const htmlBody = await this.getEmailBodyWithHtml(part);
                     if (htmlBody) return htmlBody;
                 }
             }
@@ -144,7 +221,7 @@ export class EmailUtils extends GoogleClient {
             const response = await this.gmail.users.messages.list({
                 userId: 'me',
                 q: `in:inbox after:${formattedDate}`,  // Gmail search query format: YYYY/MM/DD
-                //maxResults: 30 // Limit to 30 messages for now - we can comment this out later
+                maxResults: 20 // Limit to 20 messages for now - we can comment this out later
             });
 
             console.log("Initial messages response:", {
@@ -224,7 +301,7 @@ export class EmailUtils extends GoogleClient {
         }
         
         // Process messages to extract content
-        const messages = thread.data.messages.map(message => {
+        const messages = await Promise.all(thread.data.messages.map(async message => {
             // Extract headers
             const headers = message.payload?.headers || [];
             const subject = headers.find(h => h.name === 'Subject')?.value || '';
@@ -233,7 +310,7 @@ export class EmailUtils extends GoogleClient {
             const date = headers.find(h => h.name === 'Date')?.value || '';
             
             // Use our existing getEmailBody method for better content extraction
-            const content = this.getEmailBody(message.payload);
+            const content = await this.getEmailBody(message.payload);
             
             // Parse recipients
             const recipients = to.split(',').map(r => r.trim());
@@ -246,7 +323,7 @@ export class EmailUtils extends GoogleClient {
                 content,
                 date,
             };
-        });
+        }));
         
         // Helper function to normalize email addresses
         const normalizeEmailAddress = (email: string): string => {
@@ -294,8 +371,22 @@ export class EmailUtils extends GoogleClient {
             });
             
             if (!response.data || !response.data.payload) {
+                ThreadDebugLogger.log('[Email Debug] No data or payload for email:', emailId);
                 return null;
             }
+            
+            // Debug log raw message data
+            // ThreadDebugLogger.log('[Email Debug] Raw message data:', {
+            //     id: emailId,
+            //     payload: {
+            //         mimeType: response.data.payload.mimeType,
+            //         hasBody: !!response.data.payload.body,
+            //         bodySize: response.data.payload.body?.size,
+            //         hasParts: !!response.data.payload.parts,
+            //         partsCount: response.data.payload.parts?.length,
+            //         snippet: response.data.snippet
+            //     }
+            // });
             
             // Extract headers
             const headers = response.data.payload.headers || [];
@@ -304,8 +395,23 @@ export class EmailUtils extends GoogleClient {
             const to = headers.find(h => h.name === 'To')?.value || '';
             const date = headers.find(h => h.name === 'Date')?.value || '';
             
+            // Debug log headers
+            // ThreadDebugLogger.log('[Email Debug] Extracted headers:', {
+            //     subject: subject || '(empty)',
+            //     from: from || '(empty)',
+            //     to: to || '(empty)',
+            //     date: date || '(empty)'
+            // });
+            
             // Extract content
-            const content = this.getEmailBody(response.data.payload);
+            const content = await this.getEmailBody(response.data.payload);
+            
+            // Debug log content info
+            // ThreadDebugLogger.log('[Email Debug] Content extraction:', {
+            //     hasContent: !!content,
+            //     contentLength: content?.length || 0,
+            //     firstFewChars: content ? content.substring(0, 50) + '...' : '(empty)'
+            // });
             
             // Parse recipients
             const recipients = to.split(',').map(r => r.trim());
@@ -319,8 +425,67 @@ export class EmailUtils extends GoogleClient {
                 date,
             };
         } catch (error) {
-            console.error('Error fetching email by ID:', error);
+            console.error('[Email Debug] Error fetching email by ID:', emailId, error);
             return null;
+        }
+    }
+
+    private async cleanPlainTextEmail(plainText: string): Promise<string> {
+        if (!plainText) return '';
+        
+        ThreadDebugLogger.log('Starting cleanPlainTextEmail', {
+            inputLength: plainText?.length,
+            firstFewChars: plainText?.substring(0, 100)
+        });
+        
+        try {
+            // Step 1: Normalize whitespace
+            let cleaned = plainText
+                .replace(/\r\n/g, '\n') // Convert CRLF to LF
+                .replace(/\r/g, '\n') // Convert CR to LF
+                .replace(/\n{3,}/g, '\n\n') // Replace 3+ consecutive newlines with just 2
+                .replace(/[ \t]+\n/g, '\n') // Remove trailing spaces on lines
+                .replace(/^\s+/, '') // Trim leading whitespace
+                .trim();
+            
+            // Step 2: Remove or shorten URLs
+            // Option 1: Remove URLs entirely
+            // cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, '[URL]');
+            // Option 2: Shorten URLs (keeping domain)
+            cleaned = cleaned.replace(/https?:\/\/([^\/\s]+)[^\s]*/g, 'https://$1/...');
+            
+            // Step 3: Remove common email footer patterns
+            const footerPatterns = [
+                /Unsubscribe[\s\S]*$/i,
+                /To unsubscribe[\s\S]*$/i,
+                /View in browser[\s\S]*$/i,
+                /View as a web page[\s\S]*$/i,
+                /This email was sent to[\s\S]*$/i,
+                /\(c\) \d{4}[\s\S]*$/i,
+                /All rights reserved[\s\S]*$/i,
+                /If you would no longer like to receive emails[\s\S]*$/i,
+                /To view our privacy policy[\s\S]*$/i,
+                /This message was sent to:[\s\S]*$/i,
+                /Email Preferences[\s\S]*$/i
+            ];
+            
+            for (const pattern of footerPatterns) {
+                cleaned = cleaned.replace(pattern, '');
+            }
+            
+            // Step 4: Remove excessive spacing between paragraphs (more than 2 newlines)
+            cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+            
+            ThreadDebugLogger.log('cleanPlainTextEmail complete', {
+                finalLength: cleaned.length,
+                sample: cleaned.substring(0, 100) + '...'
+            });
+            
+            return cleaned;
+        } catch (error) {
+            console.error('Error in cleanPlainTextEmail:', error);
+            // Return original text if cleaning fails
+            return plainText;
         }
     }
 }

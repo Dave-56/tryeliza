@@ -32,7 +32,7 @@ export function NavBar() {
             "text-2xl font-medium tracking-tight",
             "text-foreground font-tech"
           )}>
-            Eliza AI
+            TryEliza
           </span>
         </div>
         <div className="flex items-center gap-4">

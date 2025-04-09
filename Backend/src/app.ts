@@ -21,12 +21,14 @@ import followUpEmailRoutes from './api/routes/followUpEmailRoutes';
 //Import Webhook and Schedulers
 import { SchedulerService } from './services/Scheduler/SchedulerService';
 import { setupWatchRenewal } from './utils/webhookHelper';
-import { checkWaitingTasks, initializeWaitingTaskScheduler } from './services/Scheduler/waitingTaskScheduler';
+import { checkWaitingTasks, initializeWaitingTaskScheduler } from './services/Scheduler/waitingTaskScheduler'; 
+// Import Agent Service
+import { AgentService } from './services/Agent/AgentService';
 
 dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development' });
 
 // Initialize and start the scheduler
-const schedulerService = new SchedulerService();
+const schedulerService = new SchedulerService(new AgentService());
 schedulerService.startScheduledJobs();
 // Initialize the waiting task scheduler
 initializeWaitingTaskScheduler();

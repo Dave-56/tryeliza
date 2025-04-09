@@ -1,1 +1,7 @@
 /Backend
+
+# Ignore legacy VCS folders
+.bzr/
+.darcs/
+.hg/
+BitKeeper/

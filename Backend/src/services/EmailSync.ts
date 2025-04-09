@@ -1,25 +1,31 @@
 import { db } from '../db/index';
 import { eq, and } from 'drizzle-orm';
-import { emailAccounts, users, tasks, processedEmails } from '../db/schema';
+import { emailAccounts, users } from '../db/schema';
 import { GoogleService } from './Google/GoogleService';
 import { EmailProcessingService } from './Email/EmailProcessingService';
 import { EmailSummaryService } from './Summary/EmailSummaryService';
-import { EmailThread, SummarizationResponse } from '../Types/model';
+import { EmailThread } from '../Types/model';
+import { AgentService } from './Agent/AgentService';
+import { EmailThreadAnalysisService } from './Agent/email-thread-analysis';
+import ThreadDebugLogger from '../utils/ThreadDebugLogger';
 
 interface SyncResult {
   synced: number;
   processed: number;
   failed: number;
-  summary?: SummarizationResponse;
 }
 
 export class EmailSyncService {
-    private emailProcessingService: EmailProcessingService;
-    
-    constructor() {
-        this.emailProcessingService = new EmailProcessingService();
-    }
-    
+  private emailProcessingService: EmailProcessingService;
+  private emailThreadAnalysisService: EmailThreadAnalysisService;
+  private emailSummaryService: EmailSummaryService;
+
+  constructor(private agentService: AgentService) {
+    this.emailProcessingService = new EmailProcessingService();
+    this.emailThreadAnalysisService = new EmailThreadAnalysisService(agentService);
+    this.emailSummaryService = new EmailSummaryService();
+  }
+
     async syncEmails(userId: string, accountId?: number, period?: 'morning' | 'evening'): Promise<SyncResult> {
     try {
       // Fetch active email accounts for the user based on the parameters
@@ -101,88 +107,71 @@ export class EmailSyncService {
             allThreads.push(preservedThread);
           });
 
-
-
-          // Process each thread (limit to first 20)
-          const threadsToProcess = threads.slice(0, 20);
-          for (const thread of threadsToProcess) {
+          // Process all threads in batches of 20
+          for (let i = 0; i < threads.length; i += 20) {
+            const threadsToProcess = threads.slice(i, Math.min(i + 20, threads.length));
+            
             try {
-              const categorization = await this.emailProcessingService.categorizeEmail(account, thread);
-              
-              if (categorization) {
-                console.log("Processed email thread:", thread.id, "Category:", categorization.isActionRequired ? "Action" : "No Action");
-                stats.processed++;
-              } else {
-                console.log("Skipped thread (already processed or no action):", thread.id);
+              // const isAllThreadsCategorized = await this.emailThreadAnalysisService.categorizeThreadBatch(
+              //   threadsToProcess, 
+              //   userId,
+              //   threads.length
+              // );
+
+              // ThreadDebugLogger.log('Batch categorization status', { 
+              //   isAllThreadsCategorized,
+              //   batchSize: threadsToProcess.length,
+              //   totalThreads: threads.length,
+              //   processedUpTo: i + threadsToProcess.length
+              // });
+
+              //Process individual threads for task extraction
+              for (const thread of threadsToProcess) {
+                try {
+                  const categorization = await this.emailProcessingService.categorizeEmail(account, thread);
+                  
+                  if (categorization) {
+                    console.log("Processed email thread:", thread.id, "Category:", categorization.isActionRequired ? "Action" : "No Action");
+                    stats.processed++;
+                  } else {
+                    console.log("Skipped thread (already processed or no action):", thread.id);
+                  }
+                } catch (error) {
+                  console.error("Error processing thread:", thread.id, error);
+                  stats.failed++;
+                }
               }
-            } catch (error) {
-              console.error("Error processing thread:", thread.id, error);
-              stats.failed++;
+            } catch (batchError) {
+              console.error("Error processing batch:", batchError);
+              stats.failed += threadsToProcess.length;
             }
           }
+          try {
+            const summaries = await this.emailThreadAnalysisService.generateSummaries(userId);
+            await this.emailSummaryService.storeCategoryHighlights(userId, {
+              summaries: summaries,
+              totalProcessed: threads.length
+            });
 
-          // Update historyId using profile from GoogleServices
+            ThreadDebugLogger.log('Thread analysis complete', { 
+              summaries,
+              totalProcessed: threads.length
+            });
+
+            console.log("Email sync complete for account:", account.email_address, stats);
+
+          } catch (error) {
+            console.error("Error processing threads:", error);
+            stats.failed += threads.length;
+          }
+              // Update historyId using profile from GoogleServices
           const historyId = await googleServices.getLatestHistoryId();
-          await db.update(emailAccounts)
-            .set({
-              history_id: historyId,
-              last_sync: new Date()
-            })
-            .where(eq(emailAccounts.id, account.id));
+          await db.update(emailAccounts).set({ last_sync: new Date(), history_id: historyId }).where(eq(emailAccounts.id, account.id));
         } catch (error) {
-          console.error("Error fetching emails for account:", account.email_address, error);
-          continue;
+          console.error("Error updating historyId:", error);
         }
       }
-      
-      // Generate summary for all collected threads
-      console.log("Generating summary for threads:", allThreads.length);
-
-      // Fetch tasks marked for summary inclusion
-      const tasksForSummary = await db
-        .select({
-          email_id: processedEmails.email_id,
-          task: tasks
-        })
-        .from(processedEmails)
-        .innerJoin(tasks, eq(tasks.email_id, processedEmails.email_id))
-        .where(and(
-          eq(processedEmails.user_id, userId),
-          eq(processedEmails.included_in_summary, true)
-        ));
-
-      // Create map of email_id to task
-      const taskMap = new Map(tasksForSummary.map(t => [t.email_id, t.task]));
-
-      // Add tasks to threads
-      const threadsWithTasks = allThreads.map(thread => ({
-        ...thread,
-        messages: thread.messages.map(msg => ({
-          ...msg,
-          task: taskMap.get(msg.id) ? {
-            ...taskMap.get(msg.id),
-            due_date: taskMap.get(msg.id).due_date?.toISOString() || null,
-            created_at: taskMap.get(msg.id).created_at?.toISOString() || null,
-            updated_at: taskMap.get(msg.id).updated_at?.toISOString() || null,
-            received_date: taskMap.get(msg.id).received_date?.toISOString() || null
-          } : undefined
-        }))
-      }));
-
-      const summary = await this.emailProcessingService.summarizeThreads(threadsWithTasks, userId);
-      console.log("Summary generated successfully");
-
-      // Save the summary to database
-      try {
-        // Use EmailSummaryService to store the summary
-        const emailSummaryService = new EmailSummaryService();
-        await emailSummaryService.storeSummaryFromSync(userId, summary, period);
-      } catch (summaryError) {
-        console.error("Error saving daily summary:", summaryError);
-        // Continue execution even if summary saving fails
-      }
-
-      return { ...stats, summary };
+      return { ...stats };
     } catch (error) {
       console.error("Error in email sync:", error);
       throw error;
@@ -190,4 +179,4 @@ export class EmailSyncService {
   }
 }
 
-export const emailSyncService = new EmailSyncService();
+export const emailSyncService = new EmailSyncService(new AgentService());
