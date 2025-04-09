@@ -367,6 +367,17 @@ export const webhookNotifications = pgTable("webhook_notifications", {
   updated_at: timestamp("updated_at").defaultNow(),
 });
 
+// Add table to track deleted account notifications
+export const deletedAccountNotifications = pgTable('deleted_account_notifications', {
+  id: serial('id').primaryKey(),
+  notification_id: text('notification_id').notNull(),
+  email_address: text('email_address').notNull(),
+  received_at: timestamp('received_at').defaultNow(),
+  history_id: text('history_id'),
+  subscription: text('subscription'),
+  created_at: timestamp('created_at').defaultNow()
+});
+
 // Update relations
 export const emailsRelations = relations(emails, ({ one, many }) => ({
   user: one(users, {

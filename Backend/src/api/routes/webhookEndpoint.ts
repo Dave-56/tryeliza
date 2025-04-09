@@ -1,7 +1,7 @@
 // Set up webhook endpoint in your API
 import { db } from '../../db/index';
 import { eq } from 'drizzle-orm';
-import { webhookNotifications } from '../../db/schema'; // Import db and webhookNotifications
+import { webhookNotifications, deletedAccountNotifications } from '../../db/schema'; // Import db and webhookNotifications
 import express, { Request, Response } from 'express';
 import { webhookLimiter } from '../middleware/rate-limiter';
 import { emailAccountRepository } from '../../repositories';
@@ -68,7 +68,8 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
         // Check if this is a Google Pub/Sub notification
         const isPubSubNotification = req.body.message && 
                                     req.body.subscription && 
-                                    req.body.subscription.includes('projects/eliza-replit/subscriptions/');
+                                    (req.body.subscription.includes('projects/eliza-replit/subscriptions/') ||
+                                    req.body.subscription.includes('projects/eliza-v1-454308/subscriptions/'));
 
         if (isPubSubNotification) {
             // Validate the domain for PubSub notifications
@@ -132,9 +133,21 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
         const emailAccount = await emailAccountRepository.findByEmailAddress(parsedData.emailAddress);
 
         if (!emailAccount) {
-            console.error('WebhookEmailAccountNotFound', { emailAddress: parsedData.emailAddress });
-            webhookMetrics.failedProcessing++;
-            return res.status(404).json({ error: 'Email account not found' });
+            console.log('WebhookEmailAccountNotFound - likely deleted account', { emailAddress: parsedData.emailAddress });
+            // Record this in a separate table for auditing (optional)
+            try {
+                await db.insert(deletedAccountNotifications).values({
+                    notification_id: message.messageId,
+                    email_address: parsedData.emailAddress,
+                    history_id: parsedData.historyId,
+                    subscription: req.body.subscription,
+                    received_at: new Date()
+                }).onConflictDoNothing();
+            } catch (error) {
+                console.error('Failed to record deleted account notification:', error);
+            }
+            // Return success to prevent retries
+            return res.status(200).json({ status: 'success', message: 'Account no longer exists' });
         }
 
         if (!emailAccount.is_connected) {
