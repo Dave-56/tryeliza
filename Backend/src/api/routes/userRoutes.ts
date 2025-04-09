@@ -197,4 +197,15 @@ router.get('/email-accounts', auth, async (req: Request, res: Response<BackendRe
   }
 });
 
+// Simple test endpoint for debugging
+router.get('/test', (req: Request, res: Response) => {
+  console.log('=== TEST ENDPOINT REACHED ===');
+  return res.json({
+    message: 'Test endpoint working',
+    timestamp: new Date().toISOString(),
+    headers: req.headers,
+    isSuccess: true
+  });
+});
+
 export default router;
