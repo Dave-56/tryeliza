@@ -403,13 +403,20 @@ export function generateSummaryPrompt(params: ThreadSummarizationParams): string
 
 --- CATEGORY-SPECIFIC NOTES ---
  ${params.category_name === 'Payments' ? `
+ • ALWAYS include specific payment amounts with currency symbols (e.g., $500, €200, £150)
+ • ALWAYS specify payment status (completed, pending, due, refunded, etc.)
+ • ALWAYS include payment dates (due dates, processing dates, etc.)
+ • Include sender/recipient names for all transactions
+ • Highlight unusual, large, or time-sensitive payments with [[brackets]]
+ • For transfers, always specify the exact amount transferred
+ • For invoices, always include the amount, due date, and sender
  • Group similar transactions naturally  
  • Include specific amounts and payment statuses  
- • Highlight any unusual or large payments  
+ • Highlight any unusual or large payments 
  
  Example:
  {
-   "key_highlights": "Looks like you've got some money moving today! {Bright Studio|msg_123} sent over their invoice — it's [[due April 2nd|msg_123]] for [[$1,200|msg_123]].\\n\\nAlso, {your web host|msg_456} caught a billing mistake and is issuing a refund.\\n\\nOh, and {your Stripe report|msg_789} just landed — revenue's running a bit light this week.",
+   "key_highlights": "Looks like you've got some money moving today! {Bright Studio|msg_123} sent over their invoice — it's [[due April 2nd|msg_123]] for [[$1,200|msg_123]].\\n\\n{Chase Bank|msg_456} confirmed your [[$5,000 transfer to savings|msg_456]] was completed yesterday.\\n\\nAlso, {your web host|msg_789} caught a billing mistake and is [[issuing a $75 refund|msg_789]] to your credit card.",
    "category_name": "Payments"
  }` : params.category_name === 'Travel' ? `
  • Highlight booked vs pending travel  
@@ -467,10 +474,12 @@ export function generateSummaryPrompt(params: ThreadSummarizationParams): string
 INCORRECT (too vague, missing formatting):
 "Here's a quick update! It looks like your denim is getting some attention. Unfortunately, the details are a bit sparse, but it seems like there's a push to get your denim stage-ready. Keep an eye out for more info soon!"
 "Here's a quick update! Shibuya Hi-Fi sent a cheerful note, though the details are missing. Meanwhile, Startup & VC shared a list of new venture capital jobs for Week 14 of 2025. They're also hosting a session on April 15 about what matters to LPs beyond returns, featuring speakers like Rodney Reisdorf and Tim Holladay."
+"Here's a quick update! Your bank confirmed that your transfer is complete. Keep an eye on your account for the updated balance."
 
 CORRECT (specific details, proper formatting):
 "Here's a quick update! {Levi's® Tailor Shop|thread.id} wants to help get your denim [[stage-ready for festival season|thread.id]]. They're offering custom touches like chainstitch embroidery and Western-inspired patches.\\n\\nThey've also outlined a [[simple three-step process|thread.id]] for ordering online and picking up in store for customization." 
 "Here's a quick one! {Startup & VC|thread.id} shared a list of [[new venture capital jobs for Week 14 of 2025|thread.id]]. They're also hosting a session on April 15 about what matters to LPs beyond returns, featuring speakers like Rodney Reisdorf and Tim Holladay."
+"Here's a quick update on your finances! {Chase Bank|thread.id} confirmed your [[$2,500 transfer to your savings account|thread.id]] was completed on April 7th. They mentioned it may take 24 hours for the updated balance to appear in your account."
 
  --- COMMON ERRORS TO AVOID ---
  • Vague summaries that miss specific details
