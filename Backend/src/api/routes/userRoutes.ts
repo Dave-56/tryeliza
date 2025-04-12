@@ -197,26 +197,6 @@ router.get('/email-accounts', auth, async (req: Request, res: Response<BackendRe
   }
 });
 
-// Simplified email accounts endpoint for debugging
-router.get('/email-accounts-test', (req: Request, res: Response) => {
-  console.log('=== EMAIL ACCOUNTS TEST ENDPOINT REACHED ===');
-  console.log('Auth user:', req.user);
-  
-  // Skip database access, return mock data
-  return res.json({
-    data: [
-      {
-        id: 'test-1',
-        provider: 'google',
-        emailAddress: 'test@example.com',
-        isActive: true,
-        expiresAt: new Date().toISOString()
-      }
-    ],
-    isSuccess: true
-  });
-});
-
 // Simple test endpoint for debugging
 router.get('/test', (req: Request, res: Response) => {
   console.log('=== TEST ENDPOINT REACHED ===');

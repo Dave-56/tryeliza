@@ -841,6 +841,18 @@ TASK EXTRACTION GUIDELINES:
      * Account verification requests
      * Automated security notifications
 
+   CRITICAL - NEVER CREATE TASKS FOR THESE SPECIFIC TYPES OF EMAILS:
+   - Marketing promotions and discount codes (e.g., "50% off", "Limited time offer")
+   - Event registrations that don't require business decisions (conferences, webinars, etc.)
+   - Bank alerts or financial notifications that are purely informational
+   - Subscription renewal notices that don't require immediate action
+   - Terms of service or user agreement updates
+   - Routine account alerts or notifications
+   - Promotional content from vendors or services
+   - Newsletters or informational content
+   - Standard system notifications or alerts
+   - Event invitations that aren't directly business-critical
+
 3. TASK TITLE GUIDELINES:
    - Keep titles under 75 characters
    - Use action-oriented verbs (Respond, Review, Schedule, etc.)
@@ -1015,6 +1027,11 @@ TASK EXTRACTION GUIDELINES:
     - Bank alerts or notifications that don't require action
     - Standard account updates without required action
     - Automated system notifications
+    - Event invitations that aren't directly business-critical
+    - Subscription renewal notices for software or services
+    - Promotional offers from vendors or partners
+    - General announcements or updates that don't require specific action
+    - Informational emails about industry trends or news
 
 11. CONFIDENCE SCORE GUIDELINES:
     - 0.9-1.0: Clear, explicit request with specific details in a high-priority business category
