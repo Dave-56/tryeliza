@@ -131,31 +131,13 @@ export function splitLargeThread(thread: EmailThread, tokenLimit: number): Email
      * preserving sentence and paragraph boundaries
      */
 export async function truncateThreadForLLM(thread: EmailThread, tokenLimit: number = DEFAULT_TOKEN_LIMIT): Promise<EmailThread> {
-    ThreadDebugLogger.log(`Truncating thread ${thread.id} with ${thread.messages?.length || 0} messages`);
-
-    ThreadDebugLogger.log('Full thread structure:', {
-        threadId: thread.id,
-        threadSubject: thread.subject,
-        messageCount: thread.messages?.length,
-        threadStructure: {
-            ...thread,
-            messages: thread.messages?.map(msg => ({
-                id: msg.id,
-                headers: msg.headers,
-                snippet: msg.snippet || 'No preview available',
-                body: msg.body ? msg.body : 'No content available',
-                labelIds: msg.labelIds,
-                internalDate: msg.internalDate
-            }))
-        }
-    });
-
+   
     // Calculate max message length based on token limit
     // This is a rough approximation - 100,000 chars is about 25,000 tokens
     const MAX_MESSAGE_LENGTH = Math.floor(tokenLimit * 4);
 
     if (thread.messages?.length > 10) {
-        ThreadDebugLogger.log(`Thread ${thread.id} exceeds 10 messages, will be truncated`);
+        //ThreadDebugLogger.log(`Thread ${thread.id} exceeds 10 messages, will be truncated`);
     }
 
     const truncatedMessages = await Promise.all((thread.messages || []).map(async message => {
@@ -164,10 +146,10 @@ export async function truncateThreadForLLM(thread: EmailThread, tokenLimit: numb
         
         if (typeof messageBody === 'string' && messageBody) {
             if (messageBody.length > MAX_MESSAGE_LENGTH) {
-                ThreadDebugLogger.log(`Splitting long message body for ${message.id}`, {
-                    originalLength: messageBody.length,
-                    chunks: Math.ceil(messageBody.length / MAX_MESSAGE_LENGTH)
-                });
+                // ThreadDebugLogger.log(`Splitting long message body for ${message.id}`, {
+                //     originalLength: messageBody.length,
+                //     chunks: Math.ceil(messageBody.length / MAX_MESSAGE_LENGTH)
+                // });
                 
                 const chunks: string[] = [];
                 let currentPosition = 0;
@@ -219,11 +201,11 @@ export async function truncateThreadForLLM(thread: EmailThread, tokenLimit: numb
 
     const flattenedMessages = truncatedMessages.flat().filter(msg => msg !== null);
     
-    ThreadDebugLogger.log(`Thread ${thread.id} processed messages:`, {
-        originalCount: thread.messages?.length || 0,
-        partsCount: flattenedMessages.length,
-        splitMessages: flattenedMessages.length - (thread.messages?.length || 0)
-    });
+    // ThreadDebugLogger.log(`Thread ${thread.id} processed messages:`, {
+    //     originalCount: thread.messages?.length || 0,
+    //     partsCount: flattenedMessages.length,
+    //     splitMessages: flattenedMessages.length - (thread.messages?.length || 0)
+    // });
     
     return {
         ...thread,

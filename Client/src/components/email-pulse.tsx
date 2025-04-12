@@ -393,7 +393,7 @@ export function EmailPulse({ onTabChange }: InboxSummaryProps) {
                 className="absolute top-2 right-2 p-2 rounded-full bg-white/80 hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Get new GIF"
               >
-                <RefreshCcw className="h-4 w-4 text-slate-600" />
+                {/* <RefreshCcw className="h-4 w-4 text-slate-600" /> */}
               </button>
             </div>
             

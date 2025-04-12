@@ -218,7 +218,7 @@ export class AgentService {
     }
 
     async categorizeThreads(params: ThreadCategorizationParams, userId?: string): Promise<ThreadCategorizationResult> {
-        ThreadDebugLogger.log('Calling categorizeThreads');
+        // ThreadDebugLogger.log('Calling categorizeThreads');
         // Clean excessive whitespace from message bodies
         params.threads = params.threads.map(thread => ({
             ...thread,
@@ -228,35 +228,7 @@ export class AgentService {
             }))
         }));
 
-        // Log detailed thread content analysis
-        ThreadDebugLogger.log('Thread Content Analysis:', {
-            threadCount: params.threads.length,
-            threads: params.threads.map(thread => ({
-                id: thread.id,
-                subject: thread.messages?.[0]?.headers?.subject,
-                messages: thread.messages?.map(msg => ({
-                    from: msg.headers?.from,
-                    subject: msg.headers?.subject,
-                    bodyAnalysis: {
-                        length: msg.body?.length || 0,
-                        // Show content preview and flag special chars
-                        preview: msg.body?.substring(0, 2000),
-                        // specialCharacters: (msg.body?.match(/[\u200B-\u200D\uFEFF\u0000-\u001F]|[^\x00-\x7F]/g) || [])
-                        //     .map(char => char.charCodeAt(0).toString(16))
-                        //     .filter((v, i, a) => a.indexOf(v) === i), // unique values only
-                        // Check for common content markers
-                        body: msg.body,
-                        containsHtml: msg.body?.includes('<html') || msg.body?.includes('<body'),
-                        containsTracking: msg.body?.includes('![](') || msg.body?.includes('tracking'),
-                        containsInvisibleChars: /[\u200B-\u200D\uFEFF]/.test(msg.body || ''),
-                        // Show content structure hints
-                        lineCount: msg.body?.split('\n').length || 0,
-                        urlCount: (msg.body?.match(/https?:\/\/[^\s<>"]+/g) || []).length,
-                    }
-                }))
-            }))
-        });
-
+ 
         const prompt = getThreadCategorizationPrompt(params);
         //ThreadDebugLogger.log('Prompt for categorization', prompt);
         try {
@@ -269,13 +241,13 @@ export class AgentService {
             );
 
             // Log raw response
-            ThreadDebugLogger.log('Raw response from LLM:', {
-                response: response
-            });
+            // ThreadDebugLogger.log('Raw response from LLM:', {
+            //     response: response
+            // });
 
             // Validate response structure
             if (!response.categories || !Array.isArray(response.categories)) {
-                ThreadDebugLogger.log('Invalid response structure - missing categories array');
+                //ThreadDebugLogger.log('Invalid response structure - missing categories array');
                 throw new Error('Invalid response structure - missing categories array');
             }
 
@@ -294,10 +266,10 @@ export class AgentService {
                             !thread.messages || 
                             !Array.isArray(thread.messages) || 
                             thread.messages.length === 0) {
-                            ThreadDebugLogger.log('Found malformed thread in LLM response', {
-                                threadId: thread.id || 'unknown',
-                                threadStructure: thread
-                            });
+                            //ThreadDebugLogger.log('Found malformed thread in LLM response', {
+                            //    threadId: thread.id || 'unknown',
+                            //    threadStructure: thread
+                            //});
                             return null; // Will be filtered out below
                         }
                         // Find the original thread to get its first message's subject
@@ -305,11 +277,11 @@ export class AgentService {
                             t.id === thread.id
                         );
 
-                        ThreadDebugLogger.log('Thread validation:', {
-                            searchingFor: thread.id,
-                            foundOriginal: !!originalThread,
-                            originalSubject: originalThread?.messages?.[0]?.headers?.subject
-                        });
+                        //ThreadDebugLogger.log('Thread validation:', {
+                        //    searchingFor: thread.id,
+                        //    foundOriginal: !!originalThread,
+                        //    originalSubject: originalThread?.messages?.[0]?.headers?.subject
+                        //});
                         
                         if (originalThread) {
                             categorizedThreadIds.add(originalThread.id);
@@ -340,13 +312,13 @@ export class AgentService {
             const uncategorizedThreads = params.threads.filter(t => !categorizedThreadIds.has(t.id));
             
             if (uncategorizedThreads.length > 0) {
-                ThreadDebugLogger.log('Found dropped threads - attempting recategorization', {
-                    droppedCount: uncategorizedThreads.length,
-                    droppedThreads: uncategorizedThreads.map(t => ({
-                        id: t.id,
-                        subject: t.messages?.[0]?.headers?.subject
-                    }))
-                });
+                // ThreadDebugLogger.log('Found dropped threads - attempting recategorization', {
+                //     droppedCount: uncategorizedThreads.length,
+                //     droppedThreads: uncategorizedThreads.map(t => ({
+                //         id: t.id,
+                //         subject: t.messages?.[0]?.headers?.subject
+                //     }))
+                // });
 
                 // Try to categorize dropped threads
                 try {
@@ -356,9 +328,9 @@ export class AgentService {
                         currentDate: new Date().toISOString()
                     };
 
-                    ThreadDebugLogger.log('Retrying categorization for dropped threads', {
-                        threadCount: uncategorizedThreads.length
-                    });
+                    // ThreadDebugLogger.log('Retrying categorization for dropped threads', {
+                    //     threadCount: uncategorizedThreads.length
+                    // });
 
                     const retryResponse = await this.llmService.generateResponse(
                         getThreadCategorizationPrompt(retryParams),
@@ -368,17 +340,17 @@ export class AgentService {
                         userId  // Use the function parameter instead of params.userId
                     );
 
-                    ThreadDebugLogger.log('Retry categorization response', {
-                        categories: retryResponse.categories?.map(c => ({
-                            name: c.name,
-                            threadCount: c.threads?.length || 0,
-                            threads: c.threads?.map(t => ({
-                                id: t.id,
-                                subject: t.subject,
-                                body: t.body
-                            }))
-                        }))
-                    });
+                    // ThreadDebugLogger.log('Retry categorization response', {
+                    //     categories: retryResponse.categories?.map(c => ({
+                    //         name: c.name,
+                    //         threadCount: c.threads?.length || 0,
+                    //         threads: c.threads?.map(t => ({
+                    //             id: t.id,
+                    //             subject: t.subject,
+                    //             body: t.body
+                    //         }))
+                    //     }))
+                    // });
 
                     // If retry succeeded, merge the categories
                     if (retryResponse.categories && Array.isArray(retryResponse.categories)) {
@@ -411,14 +383,14 @@ export class AgentService {
                                 );
 
                                 if (validThreads.length < retryCat.threads.length) {
-                                    ThreadDebugLogger.log('Filtered out malformed threads during retry', {
-                                        categoryName: retryCat.name,
-                                        originalCount: retryCat.threads.length,
-                                        validCount: validThreads.length,
-                                        droppedThreads: retryCat.threads
-                                            .filter(t => !t.id || (t.subject === undefined || t.subject === '' || !t.messages || !Array.isArray(t.messages) || t.messages.length === 0))
-                                            .map(t => ({ id: t.id, structure: t }))
-                                    });
+                                    // ThreadDebugLogger.log('Filtered out malformed threads during retry', {
+                                    //     categoryName: retryCat.name,
+                                    //     originalCount: retryCat.threads.length,
+                                    //     validCount: validThreads.length,
+                                    //     droppedThreads: retryCat.threads
+                                    //         .filter(t => !t.id || (t.subject === undefined || t.subject === '' || !t.messages || !Array.isArray(t.messages) || t.messages.length === 0))
+                                    //         .map(t => ({ id: t.id, structure: t }))
+                                    // });
                                 }
                                 // Add valid threads to existing category
                                 existingCat.threads.push(...validThreads);
@@ -443,13 +415,13 @@ export class AgentService {
 
                     // Add remaining uncategorized to Notifications -- need to provide an efficient method, maybe retry again?
                     if (stillUncategorized.length > 0) {
-                        ThreadDebugLogger.log('Threads still uncategorized after retry', {
-                            count: stillUncategorized.length,
-                            threads: stillUncategorized.map(t => ({
-                                id: t.id,
-                                subject: t.messages?.[0]?.headers?.subject
-                            }))
-                        });
+                        // ThreadDebugLogger.log('Threads still uncategorized after retry', {
+                        //     count: stillUncategorized.length,
+                        //     threads: stillUncategorized.map(t => ({
+                        //         id: t.id,
+                        //         subject: t.messages?.[0]?.headers?.subject
+                        //     }))
+                        // });
 
                         let notificationsCategory = validatedResponse.categories.find(c => c.name === 'Notifications');
                         if (!notificationsCategory) {
@@ -478,9 +450,9 @@ export class AgentService {
                         })));
                     }
                 } catch (retryError) {
-                    ThreadDebugLogger.log('Error in retry categorization', {
-                        error: retryError.message
-                    });
+                    // ThreadDebugLogger.log('Error in retry categorization', {
+                    //     error: retryError.message
+                    // });
 
                     // On retry error, fall back to Notifications (retry here instead of just adding to Notifications?)
                     let notificationsCategory = validatedResponse.categories.find(c => c.name === 'Notifications');
@@ -518,27 +490,25 @@ export class AgentService {
                 threadIds: category.threads?.map(t => t.id) || []
             }));
 
-            ThreadDebugLogger.log('Response category stats:', {
-                totalCategories: validatedResponse.categories.length,
-                categoryStats,
-                inputThreadCount: params.threads.length,
-                categorizedThreadCount: categoryStats.reduce((sum, cat) => sum + cat.threadCount, 0),
-                categories: validatedResponse.categories
-            });
+            // ThreadDebugLogger.log('Response category stats:', {
+            //     totalCategories: validatedResponse.categories.length,
+            //     categoryStats,
+            //     inputThreadCount: params.threads.length,
+            //     categorizedThreadCount: categoryStats.reduce((sum, cat) => sum + cat.threadCount, 0),
+            //     categories: validatedResponse.categories
+            // });
 
             return validatedResponse;
         } catch (error) {
-            ThreadDebugLogger.log('Error in categorizeThreads:', {
-                error: error.message,
-                inputThreadCount: params.threads.length
-            });
+            // ThreadDebugLogger.log('Error in categorizeThreads:', {
+            //     error: error.message,
+            //     inputThreadCount: params.threads.length
+            // });
             throw new Error(`Failed to categorize threads: ${error.message}`);
         }
     }
 
     async summarizeThreadsNew(params: ThreadSummarizationParams, userId?: string): Promise<ThreadSummarizationResult> {
-        ThreadDebugLogger.log('Calling summarizeThreadsNew');
-        ThreadDebugLogger.log('Params:', params);
         const prompt = generateSummaryPrompt(params);
         try {
             const response = await this.llmService.generateResponse(
@@ -550,7 +520,7 @@ export class AgentService {
                 undefined  // don't pass email ID until we have a valid one
             );
             // Validate and sanitize the response to ensure it matches our expected format
-            ThreadDebugLogger.log('Response from summarizeThreadsNew', response);
+            // ThreadDebugLogger.log('Response from summarizeThreadsNew', response);
             return response
         } catch (error) {
             throw new Error('Failed to summarize threads');

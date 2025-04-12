@@ -61,21 +61,21 @@ export class EmailSummaryService {
         console.log(`Processing ${threads.length} threads for analysis`);
         
         // Debug log thread structure
-        ThreadDebugLogger.log('Thread data before categorization:', {
-            sampleThread: threads[0] ? {
-                id: threads[0].id,
-                messages: threads[0].messages.map(msg => ({
-                    id: msg.id,
-                    subject: msg.headers?.subject,
-                    from: msg.headers?.from,
-                    bodyLength: msg.body?.length || 0,
-                    hasContent: !!msg.body,
-                    snippet: msg.snippet || 'No preview available',
-                    body: msg.body || 'No content available'
-                }))
-            } : 'No threads found',
-            threadCount: threads.length
-        });
+        // ThreadDebugLogger.log('Thread data before categorization:', {
+        //     sampleThread: threads[0] ? {
+        //         id: threads[0].id,
+        //         messages: threads[0].messages.map(msg => ({
+        //             id: msg.id,
+        //             subject: msg.headers?.subject,
+        //             from: msg.headers?.from,
+        //             bodyLength: msg.body?.length || 0,
+        //             hasContent: !!msg.body,
+        //             snippet: msg.snippet || 'No preview available',
+        //             body: msg.body || 'No content available'
+        //         }))
+        //     } : 'No threads found',
+        //     threadCount: threads.length
+        // });
 
         // Use EmailThreadAnalysisService for categorization and summarization
         const analysisService = new EmailThreadAnalysisService(this.agentService);
@@ -98,10 +98,10 @@ export class EmailSummaryService {
           totalProcessed: threads.length
         });
 
-        ThreadDebugLogger.log('Thread analysis complete', { 
-          summaries,
-          totalProcessed: threads.length
-        });
+        // ThreadDebugLogger.log('Thread analysis complete', { 
+        //   summaries,
+        //   totalProcessed: threads.length
+        // });
 
         if(!summaries) {
           console.log(`No recent summary found for user ${userId} in the specified time range`)
