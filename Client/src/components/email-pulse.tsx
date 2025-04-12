@@ -21,8 +21,8 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
   onDateSelect: (date: Date | null) => void,
   now: Date
 }) {
-  console.log('lastUpdated:', lastUpdated);
-  console.log('isFetching:', isFetching);
+  // console.log('lastUpdated:', lastUpdated);
+  // console.log('isFetching:', isFetching);
   const [weekOffset, setWeekOffset] = useState(0);
   const currentWeekStart = startOfWeek(now);
   const displayedWeekStart = weekOffset < 0 
@@ -71,7 +71,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                   Last run: {format(parseISO(lastUpdated), 'MMM d, h:mm a')}
                 </span>
               )}
-              <Button 
+              {/* <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-7 w-7 p-0 ml-1"
@@ -83,7 +83,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                 ) : (
                   <RefreshCcw className="h-3.5 w-3.5" />
                 )}
-              </Button>
+              </Button> */}
             </div>
           </div>
           
@@ -393,7 +393,7 @@ export function EmailPulse({ onTabChange }: InboxSummaryProps) {
                 className="absolute top-2 right-2 p-2 rounded-full bg-white/80 hover:bg-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Get new GIF"
               >
-                {/* <RefreshCcw className="h-4 w-4 text-slate-600" /> */}
+                <RefreshCcw className="h-4 w-4 text-slate-600" />
               </button>
             </div>
             
