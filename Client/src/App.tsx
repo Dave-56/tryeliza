@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Switch, Route, useLocation } from "wouter";
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { Analytics } from '@vercel/analytics/react';
 import { NavBar } from "@/components/nav-bar";
 import { Toaster } from "@/components/ui/toaster";
 import { AnalyticsPanel } from "@/components/analytics-panel";
@@ -113,6 +114,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
           <Router />
           <Toaster />
+          <Analytics />
       </QueryClientProvider>
     </GoogleOAuthProvider>
   );
