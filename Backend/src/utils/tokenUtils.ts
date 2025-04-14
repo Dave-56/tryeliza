@@ -8,7 +8,10 @@ export function estimateTokens(text: string): number {
 
 export const DEFAULT_TOKEN_LIMIT = 10000;
 
-export async function chunkThreads(threads: EmailThread[], tokenLimit: number = DEFAULT_TOKEN_LIMIT): Promise<EmailThread[][]> {
+export async function chunkThreads<T extends { id: string }>(
+    threads: T[], 
+    tokenLimit: number = DEFAULT_TOKEN_LIMIT
+): Promise<T[][]> {
     // Quick check - if no threads, return empty array
     if (threads.length === 0) {
         return [];
@@ -16,7 +19,7 @@ export async function chunkThreads(threads: EmailThread[], tokenLimit: number = 
     
     // Calculate total tokens for all threads
     let totalTokens = 0;
-    const threadTokenCounts: {thread: EmailThread, tokens: number}[] = [];
+    const threadTokenCounts: {thread: T, tokens: number}[] = [];
     
     for (const thread of threads) {
         const threadTokens = estimateTokens(JSON.stringify(thread));
@@ -26,16 +29,16 @@ export async function chunkThreads(threads: EmailThread[], tokenLimit: number = 
     
     // If all threads combined are below the token limit, return as a single chunk
     if (totalTokens <= tokenLimit) {
-        ThreadDebugLogger.log(`All threads fit within token limit - no chunking needed`, {
-            totalTokens,
-            tokenLimit
-        });
+        //ThreadDebugLogger.log(`All threads fit within token limit - no chunking needed`, {
+        //    totalTokens,
+        //    tokenLimit
+        //});
         return [threads];
     }
     
     // Otherwise, perform chunking
-    const chunks: EmailThread[][] = [];
-    let currentChunk: EmailThread[] = [];
+    const chunks: T[][] = [];
+    let currentChunk: T[] = [];
     let currentTokens = 0;
 
     for (const {thread, tokens: threadTokens} of threadTokenCounts) {
@@ -51,7 +54,7 @@ export async function chunkThreads(threads: EmailThread[], tokenLimit: number = 
                 console.warn(`Thread ${thread.id} exceeds token limit - using truncateThreadForLLM`);
                 
                 // Use the more sophisticated truncation function instead of splitLargeThread
-                const truncatedThread = await truncateThreadForLLM(thread, tokenLimit);
+                const truncatedThread = await truncateThreadForLLM(thread as any, tokenLimit);
                 const truncatedTokens = estimateTokens(JSON.stringify(truncatedThread));
                 
                 if (currentTokens + truncatedTokens > tokenLimit) {
@@ -62,7 +65,7 @@ export async function chunkThreads(threads: EmailThread[], tokenLimit: number = 
                     }
                 }
                 
-                currentChunk.push(truncatedThread);
+                currentChunk.push(truncatedThread as unknown as T);
                 currentTokens += truncatedTokens;
                 continue;
             }

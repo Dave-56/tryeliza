@@ -38,7 +38,7 @@ export class EmailSummaryService {
         });
         
         // Get threads for the time range (now with freshly synced data)
-        let threads = await this.getThreadsForTimeRange(account, timeRange, userId, period);
+       let threads = await this.getThreadsForTimeRange(account, timeRange, userId, period);
 
         // Gmail Fallback API search
         if(!threads.length) {
@@ -55,27 +55,40 @@ export class EmailSummaryService {
           }
         }
 
+        // let threads: EmailThread[] = [];
+        // if (account) {
+        //   const googleService = new GoogleService(
+        //     account.tokens.access_token,
+        //     account.tokens.refresh_token,
+        //     account.id.toString()
+        //   );
+        //   const startOfDay = new Date().setHours(0,0,0,0).toString();
+        //   threads = await googleService.getEmailsSinceStartOfDay(startOfDay);
+        //   console.log(`Found ${threads.length} threads from Gmail API fallback`);
+        // }
+
         // Only process first 5 threads for testing
-        threads = threads.slice(0, 20);
+        //hreads = threads.slice(0, 10);
         
         console.log(`Processing ${threads.length} threads for analysis`);
         
-        // Debug log thread structure
-        // ThreadDebugLogger.log('Thread data before categorization:', {
-        //     sampleThread: threads[0] ? {
-        //         id: threads[0].id,
-        //         messages: threads[0].messages.map(msg => ({
-        //             id: msg.id,
-        //             subject: msg.headers?.subject,
-        //             from: msg.headers?.from,
-        //             bodyLength: msg.body?.length || 0,
-        //             hasContent: !!msg.body,
-        //             snippet: msg.snippet || 'No preview available',
-        //             body: msg.body || 'No content available'
-        //         }))
-        //     } : 'No threads found',
-        //     threadCount: threads.length
-        // });
+        // Debug log complete thread structure
+        //ThreadDebugLogger.log('Thread data before categorization:', {
+        //    allThreads: threads.map(thread => ({
+        //        id: thread.id,
+        //        messages: thread.messages.map(msg => ({
+        //            id: msg.id,
+        //            subject: msg.headers?.subject,
+        //            from: msg.headers?.from,
+        //            to: msg.headers?.to,
+        //            date: msg.headers?.date,
+        //            bodyLength: msg.body?.length || 0,
+        //            hasContent: !!msg.body,
+        //            preview: msg.body || 'No preview available'
+        //        }))
+        //    })),
+        //    threadCount: threads.length
+        //});
 
         // Use EmailThreadAnalysisService for categorization and summarization
         const analysisService = new EmailThreadAnalysisService(this.agentService);
@@ -98,10 +111,10 @@ export class EmailSummaryService {
           totalProcessed: threads.length
         });
 
-        // ThreadDebugLogger.log('Thread analysis complete', { 
-        //   summaries,
-        //   totalProcessed: threads.length
-        // });
+        //ThreadDebugLogger.log('Thread analysis complete', { 
+        //  summaries,
+        //  totalProcessed: threads.length
+        //});
 
         if(!summaries) {
           console.log(`No recent summary found for user ${userId} in the specified time range`)

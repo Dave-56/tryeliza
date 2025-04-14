@@ -6,6 +6,7 @@ import EmailReplyParser from 'email-reply-parser';
 import { jsonrepair } from 'jsonrepair';
 import ThreadDebugLogger from './ThreadDebugLogger';
 import { SummarizationResponse } from '../Types/model';
+import { body } from 'express-validator';
 
 let jsonrepairModule: any;
 (async () => {
@@ -589,12 +590,13 @@ export async function cleanEmailText(
       footerRemoved: false
     };
     
-    ThreadDebugLogger.log('Starting Gmail cleaner', {
-      inputLength: text.length,
-      isHtml: text.includes('<html') || text.includes('<body'),
-      firstFewChars: text.substring(0, 100).replace(/\n/g, '\\n'),
-      options
-    });
+    // ThreadDebugLogger.log('Starting Gmail cleaner', {
+    //   inputLength: text.length,
+    //   isHtml: text.includes('<html') || text.includes('<body'),
+    //   firstFewChars: text.substring(0, 100).replace(/\n/g, '\\n'),
+    //   wholeContent: text,
+    //   options
+    // });
     
     // If content is empty, return empty string
     if (!text) {
@@ -612,7 +614,7 @@ export async function cleanEmailText(
                          (text.includes('Helllooo from Micro') || text.includes('waitlist'));
     
     if (isMicroEmail) {
-      ThreadDebugLogger.log('Detected Micro email example, applying special formatting');
+      //ThreadDebugLogger.log('Detected Micro email example, applying special formatting');
       
       // Set some stats for the UI
       stats.trackingPixelsRemoved = 1;
@@ -641,13 +643,13 @@ export async function cleanEmailText(
     try {
       // Phase 1: Parse the email using mailparser to handle MIME structure
       const parsed = await simpleParser(Buffer.from(text));
-      ThreadDebugLogger.log('Parsed with mailparser', { 
-        hasHtml: !!parsed.html, 
-        hasText: !!parsed.text,
-        subject: parsed.subject,
-        htmlLength: typeof parsed.html === 'string' ? parsed.html.length : 0,
-        textLength: typeof parsed.text === 'string' ? parsed.text.length : 0
-      });
+      //ThreadDebugLogger.log('Parsed with mailparser', { 
+      //  hasHtml: !!parsed.html, 
+      //  hasText: !!parsed.text,
+      //  subject: parsed.subject,
+      //  htmlLength: typeof parsed.html === 'string' ? parsed.html.length : 0,
+      //  textLength: typeof parsed.text === 'string' ? parsed.text.length : 0
+      //});
       
       // Determine if this is HTML content
       const isHtml = parsed.html || 
@@ -661,6 +663,12 @@ export async function cleanEmailText(
         // Phase 2: Process HTML content - Gmail specific approach
         // Use the HTML content if available, otherwise use the raw text
         const htmlContent = parsed.html || text;
+        
+        // Check if this is a Substack newsletter
+        const isSubstack = 
+          htmlContent.includes('substack') || 
+          htmlContent.includes('Substack') || 
+          (htmlContent.includes('newsletter') && htmlContent.includes('typography'));
         
         // First pass: Apply basic sanitization to remove scripts and dangerous elements
         const sanitizedHtml = sanitizeHtml(htmlContent, {
@@ -733,6 +741,107 @@ export async function cleanEmailText(
         // Handle Gmail's "Show trimmed content" parts
         $('.gmail-show-trimmed-content').remove();
         
+        // Special handling for Substack newsletters
+        if (isSubstack) {
+          //ThreadDebugLogger.log('Detected Substack newsletter, applying special extraction');
+          
+          // Extract meaningful content directly
+          let extractedText = sanitizedHtml
+            // Remove style sections which often contain large amounts of CSS
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            // Remove script sections
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            // Remove head section (contains metadata, not content)
+            .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+            // Remove footer, nav, and aside elements that typically contain non-essential content
+            .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+            .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+            .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
+            // Convert remaining HTML tags to newlines for readability
+            .replace(/<[^>]+>/g, '\n')
+            // Normalize multiple consecutive newlines to just two
+            .replace(/\n{2,}/g, '\n\n')
+            // Fix common HTML entities
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            // Handle numeric HTML entities (like &#8217; for apostrophe)
+            .replace(/&#\d+;/g, (match) => {
+              const decimalMatch = match.match(/&#(\d+);/);
+              if (decimalMatch && decimalMatch[1]) {
+                return String.fromCharCode(parseInt(decimalMatch[1], 10));
+              }
+              return match;
+            })
+            .trim();
+          
+          // Clean the text further to remove invisible characters
+          extractedText = extractedText
+            // Zero-width space characters
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            // Non-breaking space
+            .replace(/\u00A0/g, ' ')
+            // Zero-width non-joiner
+            .replace(/\u200C/g, '')
+            // Mongolian vowel separator
+            .replace(/\u180E/g, '')
+            // Narrow non-breaking space
+            .replace(/\u202F/g, ' ')
+            // Byte order mark
+            .replace(/\uFEFF/g, '')
+            // Word joiner
+            .replace(/\u2060/g, '')
+            // Invisible separator
+            .replace(/\u2063/g, '')
+            // Invisible times
+            .replace(/\u2062/g, '')
+            // Invisible plus
+            .replace(/\u2064/g, '')
+            // Function application
+            .replace(/\u2061/g, '')
+            // Special invisible characters often found in emails
+            .replace(/͏+/g, '')
+            // Soft hyphen (often used in invisible text)
+            .replace(/­+/g, '');
+          
+          // Check if the cleaned text contains only invisible characters
+          const visibleCharRegex = /[a-zA-Z0-9!@#$%^&*()_+\-=[\]{}|;':"\\|,.<?>/]+/;
+          const hasVisibleContent = visibleCharRegex.test(extractedText);
+          
+          if (!hasVisibleContent && extractedText.length > 0) {
+            // Extract any meaningful text from the original HTML as fallback
+            const textExtraction = sanitizedHtml
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+              .replace(/<[^>]+>/g, '\n')
+              .replace(/\n{2,}/g, '\n\n')
+              .trim();
+            
+            // If we found meaningful text, use it
+            if (textExtraction && textExtraction.length > 20) {
+              //ThreadDebugLogger.log('Using direct text extraction as fallback', {
+              //  extractedTextLength: textExtraction.length
+              //});
+              cleanedText = textExtraction;
+            } else {
+              // Last resort - set a helpful message
+              cleanedText = "This email appears to contain mostly formatting or special characters. " +
+                           "The content might be in a format that's difficult to extract as plain text.";
+            }
+          } else {
+            cleanedText = extractedText;
+          }
+          
+          //ThreadDebugLogger.log('Finished Substack extraction', { 
+          //  outputLength: cleanedText.length,
+          //  firstFewChars: cleanedText.substring(0, 50).replace(/\n/g, '\\n')
+          //});
+          
+          return cleanedText;
+        }
+        
         // Phase 4: Extract the main content
         // Look for common Gmail content containers
         let mainContent: string;
@@ -778,11 +887,11 @@ export async function cleanEmailText(
         
         // Extract the content
         if (contentElement) {
-          ThreadDebugLogger.log('Found main content element', { selector: contentElement.name || 'element' });
+          //ThreadDebugLogger.log('Found main content element', { selector: contentElement.name || 'element' });
           mainContent = $(contentElement).html() || '';
         } else {
           // Fallback: If we couldn't identify a clear content element, use the whole body
-          ThreadDebugLogger.log('No clear content element found, using body');
+          //ThreadDebugLogger.log('No clear content element found, using body');
           // Remove known non-content elements first
           $('style, script, link, meta').remove();
           mainContent = $('body').html() || '';
@@ -825,10 +934,10 @@ export async function cleanEmailText(
         
         // Convert to markdown
         cleanedText = turndownService.turndown(mainContent);
-        ThreadDebugLogger.log('Converted to markdown', { 
-          markdownLength: cleanedText.length,
-          firstFewChars: cleanedText.substring(0, 50).replace(/\n/g, '\\n')
-        });
+        //ThreadDebugLogger.log('Converted to markdown', { 
+        //  markdownLength: cleanedText.length,
+        //  firstFewChars: cleanedText.substring(0, 50).replace(/\n/g, '\\n')
+        //});
         
         // Phase 5: Final text clean-up
         
@@ -840,10 +949,10 @@ export async function cleanEmailText(
             const relevantFragments = parsedEmail.getFragments()
               .filter(fragment => !fragment.isQuoted() && !fragment.isSignature());
             
-            ThreadDebugLogger.log('EmailReplyParser results', {
-              totalFragments: parsedEmail.getFragments().length,
-              relevantFragments: relevantFragments.length
-            });
+            //ThreadDebugLogger.log('EmailReplyParser results', {
+            //  totalFragments: parsedEmail.getFragments().length,
+            //  relevantFragments: relevantFragments.length
+            //});
             
             if (relevantFragments.length > 0) {
               cleanedText = relevantFragments
@@ -851,7 +960,7 @@ export async function cleanEmailText(
                 .join('\n\n');
             }
           } catch (error) {
-            ThreadDebugLogger.log('Error in EmailReplyParser, using original markdown', { error });
+            //ThreadDebugLogger.log('Error in EmailReplyParser, using original markdown', { error });
           }
         }
       } else {
@@ -866,7 +975,7 @@ export async function cleanEmailText(
             .map(fragment => fragment.getContent().trim())
             .join('\n\n');
         } catch (error) {
-          ThreadDebugLogger.log('Error parsing plain text email', { error });
+          //ThreadDebugLogger.log('Error parsing plain text email', { error });
         }
       }
       
@@ -892,14 +1001,17 @@ export async function cleanEmailText(
         .filter(line => line.length > 0);
       
       cleanedText = paragraphs.join('\n\n');
-      
+      //ThreadDebugLogger.log('Finished cleanEmailText', { 
+      //  outputLength: cleanedText.length,
+      //  body: cleanedText
+      //});
       return cleanedText;
     } catch (error) {
-      ThreadDebugLogger.log('Error cleaning email', { error });
+      //ThreadDebugLogger.log('Error cleaning email', { error });
       // Return the original text if processing fails
       return text;
     }
-  }
+}
 // export async function cleanEmailText(text: string, options: { alreadyCleaned?: boolean } = {}): Promise<string> {
 //   ThreadDebugLogger.log('Starting cleanEmailText', {
 //     inputLength: text?.length,
@@ -1071,26 +1183,21 @@ export async function cleanEmailText(
 //       /to stop receiving these[\s\S]*?click here/gi,
 //       /unsubscribe[\s\S]*?click here/gi,
 //       /click here[\s\S]{0,50}to stop receiving/gi,
-//       /to unsubscribe[\s\S]{0,100}preferences/gi,
-//       /if you wish to unsubscribe[\s\S]*?here/gi,
-//       /unsubscribe[\s\S]*?here/gi,
       
 //       // Legal footers
 //       /copyright \d{4}[\s\S]*?rights reserved/gi,
 //       /terms of (use|service)[\s\S]*?privacy policy/gi,
 //       /privacy policy[\s\S]*?terms of (use|service)/gi,
 //       /do not (sell|share) my (info|information)/gi,
-//       /copyright \d{4}[\s\S]*?rights reserved/gi,
-//       /all rights reserved/gi,
       
 //       // Address blocks
 //       /\d+ [A-Za-z]+ (St|Ave|Blvd|Rd|Drive|Dr|Lane|Ln|Court|Ct|Circle|Cir|Highway|Hwy|Way|Place|Pl|Square|Sq),?[\s\S]{0,50}[A-Z]{2} \d{5}/g,
       
 //       // Common marketing phrases
+//       /click here/gi,
 //       /view in browser/gi,
 //       /view as webpage/gi,
 //       /contact us/gi,
-//       /click here/gi,
 //       /about/gi,
       
 //       // Marketing-specific headers and content (from example email)
@@ -1179,18 +1286,18 @@ export async function cleanEmailText(
  */
 
 function cleanTextFallback(text: any): string {
-  ThreadDebugLogger.log('Starting cleanTextFallback', {
-    inputType: typeof text,
-    inputLength: text?.length,
-    firstFewChars: text?.substring?.(0, 100)
-  });
+  //ThreadDebugLogger.log('Starting cleanTextFallback', {
+  //  inputType: typeof text,
+  //  inputLength: text?.length,
+  //  firstFewChars: text?.substring?.(0, 100)
+  //});
 
   // Ensure text is a string
   if (!text) return '';
   if (typeof text !== 'string') {
-    ThreadDebugLogger.log('cleanTextFallback received non-string input', {
-      type: typeof text
-    });
+    // ThreadDebugLogger.log('cleanTextFallback received non-string input', {
+    //   type: typeof text
+    // });
     return '';
   }
   
@@ -1243,14 +1350,13 @@ function cleanTextFallback(text: any): string {
   // Step 4: Final cleanup
   cleanedText = cleanedText.trim();
   
-  ThreadDebugLogger.log('cleanTextFallback complete', {
-    finalLength: cleanedText.length,
-    fullContent: cleanedText
-  });
+  //ThreadDebugLogger.log('cleanTextFallback complete', {
+  //  finalLength: cleanedText.length,
+  //  fullContent: cleanedText
+  //});
   
   return cleanedText;
   }
-
 /**
  * Validates and sanitizes the thread summarization response from the LLM
  * to reduce hallucinations and ensure consistent output format.

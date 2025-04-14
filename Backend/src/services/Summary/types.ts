@@ -10,34 +10,54 @@ export type EmailCategory =
   | "Notifications";
 
 export interface ThreadCategorizationParams {
-    threads: EmailThread[];
+    threads: SimplifiedThread[];
     currentDate: string;
 }
 
 export interface ThreadCategorizationResult {
     categories: {
-        name: EmailCategory;  
-        threads: {
-            id: string;
-            subject?: string;
-            messages: {
-                id: string;
-                headers: {
-                    subject: string;
-                    from: string;
-                    to: string;
-                    date: string;
-                };
-                body: string;
-                threadId: string;
-            }[];
-            extractedTask?: {
-                has_task: boolean;
-                task_priority: string;
-            };
-        }[];
+        name: string;
+        threadIds: string[];
     }[];
 }
+
+export interface SimplifiedThread {
+  id: string;
+  subject: string;
+  from: string;
+  preview: string;
+  threadNumber: number; // For "Thread X of Y" tracking
+  totalThreads: number; // Total thread count
+  extractedTask?: {
+    has_task: boolean;
+    task_priority: string;
+  };
+}
+
+// export interface ThreadCategorizationResult {
+//     categories: {
+//         name: EmailCategory;  
+//         threads: {
+//             id: string;
+//             subject?: string;
+//             messages: {
+//                 id: string;
+//                 headers: {
+//                     subject: string;
+//                     from: string;
+//                     to: string;
+//                     date: string;
+//                 };
+//                 body: string;
+//                 threadId: string;
+//             }[];
+//             extractedTask?: {
+//                 has_task: boolean;
+//                 task_priority: string;
+//             };
+//         }[];
+//     }[];
+// }
 
 // Takes a single category from ThreadCategorizationResult
 export interface ThreadSummarizationParams {

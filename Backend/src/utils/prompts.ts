@@ -724,7 +724,7 @@ Subject: ${msg.subject}
 Content: ${msg.content}
         `).join('\n\n');
 
-    return `You are an AI assistant that analyzes email threads to identify required actions/tasks for project managers, small business owners, startups, and solopreneurs. Your goal is to extract actionable tasks from emails that require attention, focusing on business-critical communications.
+    return `You are an AI assistant that analyzes email threads to identify required actions/tasks for project managers, small business owners, startups, and solopreneurs. Your goal is to extract actionable tasks from emails that require attention, focusing on business-critical communications. Let's think step by step.
 
 Current Date and Time: ${params.currentTimestamp}
 

@@ -19,23 +19,17 @@ export function getThreadCategorizationPrompt(params: ThreadCategorizationParams
    }
  
    // Create thread details outside of template literals
-   const threadDetails = params.threads.map(thread => {
-     const messagesText = thread.messages.map(msg => 
-       `      From: ${msg.headers.from}
-       To: ${msg.headers.to}
-       Date: ${msg.headers.date}
-       Subject: ${msg.headers.subject || ''}
-       Body: ${msg.body}`
-     ).join('\n');
- 
-     return `  id: "${thread.id}"
-   Subject: ${thread.messages?.[0]?.headers?.subject || ''}
-   Messages:
- ${messagesText}`;
-   }).join('\n---\n');
+   const threadDetails = params.threads.map((thread, index) => {
+    // No more messages array to iterate through
+    return `Thread ${thread.threadNumber} of ${thread.totalThreads}:
+  id: "${thread.id}"
+  Subject: ${thread.subject}
+  From: ${thread.from}
+  Preview: ${thread.preview}`;
+  }).join('\n---\n');
  
    // Build the final prompt with fewer nested template literals
-   return `You are an AI assistant specialized in email intelligence for small businesses. Your task is to categorize email threads appropriately. Focus on understanding the content and context to place each thread in the right category.
+   return `You are an AI assistant specialized in email intelligence for small businesses. Your task is to categorize email threads appropriately. Focus on understanding the content and context to place each thread in the right category. Let's think this through step by step.
  
  Current Date: ${params.currentDate}
  
@@ -45,8 +39,7 @@ export function getThreadCategorizationPrompt(params: ThreadCategorizationParams
  3. If unsure about a thread's category, use "Notifications" as the default
  4. Your response MUST contain the same number of threads as the input
  5. Do not drop or ignore any threads
- 6. For each thread's subject, use the subject from the message's headers
- 7. EXTREMELY IMPORTANT: You MUST include ALL threads in your response, regardless of:
+ 6. EXTREMELY IMPORTANT: You MUST include ALL threads in your response, regardless of:
     - Presence of tracking pixels or image URLs
     - Special or invisible formatting characters
     - Complex URL structures or markdown links
@@ -90,48 +83,19 @@ export function getThreadCategorizationPrompt(params: ThreadCategorizationParams
  
  Required Output:
  - You MUST respond with ONLY a valid JSON object structured as follows:
- - IMPORTANT: Copy the subject EXACTLY as shown in the input thread's "Subject:" field
- - IMPORTANT: Preserve all URLs and links exactly as they appear in the original content
- - Do not modify, shorten, or remove any URLs/links from the message content
- - IMPORTANT: Your response MUST include ALL ${params.threads.length} threads from the input
- {
+{
     "categories": [
         {
             "name": "Category name (Important Info|Calendar|Payments|Travel|Newsletters|Notifications)",
-            "threads": [
-                {
-                    "id": "ID of the thread",
-                    "subject": "First Message Subject from input (exactly as shown)",
-                    "is_duplicate_of": "ID of original thread if this is a duplicate",
-                    "messages": [
-                        {
-                            "id": "message-id",
-                            "from": "sender@email.com",
-                            "to": "recipient@email.com",
-                            "date": "2025-03-31T13:38:50-07:00",
-                            "content": "Example with preserved link: https://example.com/long/path?param=value stays exactly as is"
-                        }
-                    ],
-                    "extractedTask": {
-                        "has_task": false,
-                        "task_priority": "low"
-                    }
-                }
+            "threadIds": [
+                "ID-of-thread-1", 
+                "ID-of-thread-2", 
+                "ID-of-thread-3"
             ]
         }
     ]
- }
- 
- Additional Rules:
- 1. Keep all URLs in their original form - do not modify, truncate, or remove them
- 2. Preserve any HTML content containing links (<a href="...">)
- 3. IMPORTANT: Use the EXACT original message content - do not summarize or modify the content in any way
- 4. For each message's "content" field, COPY THE COMPLETE TEXT from the input message body - this is the MOST IMPORTANT PART OF YOUR TASK
- 5. DO NOT create summaries of the message content - use the original text verbatim
- 6. CRITICAL: DO NOT truncate message content - include the FULL text of each message exactly as provided
- 7. CRITICAL: Message content must be preserved in its entirety - do not cut off content after a certain point
- 8. EXAMPLE OF CORRECT OUTPUT:
- 
+}
+
  Here's an example of how to properly handle a marketing email with tracking URLs:
  
  Input thread:
@@ -143,7 +107,7 @@ export function getThreadCategorizationPrompt(params: ThreadCategorizationParams
     To: user@example.com
     Date: 2025-04-06T13:35:02.000Z
     Subject: Get your denim stage-ready.
-    Body: Make your denim stand out with Levi's® Tailor Shop.
+    Preview: Make your denim stand out with Levi's® Tailor Shop.
  
  ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­\\n\\nFESTIVAL SEASON STARTS HERE\\n\\nWalk in with an idea, walk out with a whole new vibe. With custom touches like chainstitch embroidery, fringe, and Western-inspired patches, the Levi's® Tailor Shop turns everyday denim into a showstopper.\\n\\nFIND A TAILOR SHOP\\n\\nFrom brand-new buys to vintage staples, a little customization goes a long way. Visit your local Levi's® Tailor Shop and make your denim worthy of the spotlight.\\n\\nSTART SHOPPING\\n\\nREADY WHEN YOU ARE Order online and pickup in store.\\n\\nSTEP 1 Shop on levi.com or the Levi's® App and select "Pick up in store" when adding to cart.\\n\\nSTEP 2 Pick up your order at the Levi's® location you selected at checkout.\\n\\nSTEP 3 Take it to the Tailor Shop and make it uniquely yours.\\n\\nFIND A STORE\\n\\n![](https://o.mail.levi.com/o/p/1998:67f02e170f583b277a0ae707:ot:65d8f875f67df7a40015871f:1/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NDM5NDY1MDJ9.wyCgj5llD4MG3ipYqHwr4zp8A4GyjXT4HOl0Jpkbcxk)![](https://mg.mail.levi.com/o/eJyMzUFuhDAMQNHTkCVy7Dh2FlkgTRdzjIQkLSqBEaWcv6InmPX_0puPsn5sV3wde_mdz2XfTInMZEMzNVpxFJxnQPMVQdUDYiZlQWlYCiiRZnGcJWQ0S0RABgfeEjHgGGZKHrMW0hya1cFBT8s6rvVaxnnvps_PR7Qh6ECTlwZYrUBjpYwiCVIVkIGm_bw7F20q3LyUJskBWFaxbaDJmiO-ak_fdat9YT84-PyHbuOM_ef5uK83HHNF_AsAAP__42RLhQ)
  \`\`\`
@@ -153,78 +117,16 @@ export function getThreadCategorizationPrompt(params: ThreadCategorizationParams
  {
   "categories": [
     {
+      "name": "Important Info",
+      "threadIds": ["thread-123", "thread-456"]
+    },
+    {
       "name": "Notifications",
-      "threads": [
-        {
-          "id": "1960b4fd59f0e451",
-          "subject": "Get your denim stage-ready.",
-          "is_duplicate_of": null,
-          "messages": [
-            {
-              "id": "1960b4fd59f0e451",
-              "from": "\\"Levi's® Tailor Shop\\" <info@mail.levi.com>",
-              "to": "user@example.com",
-              "date": "2025-04-06T13:35:02.000Z",
-              "content": "Make your denim stand out with Levi's® Tailor Shop.\\n\\n­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­ ­\\n\\nFESTIVAL SEASON STARTS HERE\\n\\nWalk in with an idea, walk out with a whole new vibe. With custom touches like chainstitch embroidery, fringe, and Western-inspired patches, the Levi's® Tailor Shop turns everyday denim into a showstopper.\\n\\nFIND A TAILOR SHOP\\n\\nFrom brand-new buys to vintage staples, a little customization goes a long way. Visit your local Levi's® Tailor Shop and make your denim worthy of the spotlight.\\n\\nSTART SHOPPING\\n\\nREADY WHEN YOU ARE Order online and pickup in store.\\n\\nSTEP 1 Shop on levi.com or the Levi's® App and select \\"Pick up in store\\" when adding to cart.\\n\\nSTEP 2 Pick up your order at the Levi's® location you selected at checkout.\\n\\nSTEP 3 Take it to the Tailor Shop and make it uniquely yours.\\n\\nFIND A STORE\\n\\n![](https://o.mail.levi.com/o/p/1998:67f02e170f583b277a0ae707:ot:65d8f875f67df7a40015871f:1/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NDM5NDY1MDJ9.wyCgj5llD4MG3ipYqHwr4zp8A4GyjXT4HOl0Jpkbcxk)![](https://mg.mail.levi.com/o/eJyMzUFuhDAMQNHTkCVy7Dh2FlkgTRdzjIQkLSqBEaWcv6InmPX_0puPsn5sV3wde_mdz2XfTInMZEMzNVpxFJxnQPMVQdUDYiZlQWlYCiiRZnGcJWQ0S0RABgfeEjHgGGZKHrMW0hya1cFBT8s6rvVaxnnvps_PR7Qh6ECTlwZYrUBjpYwiCVIVkIGm_bw7F20q3LyUJskBWFaxbaDJmiO-ak_fdat9YT84-PyHbuOM_ef5uK83HHNF_AsAAP__42RLhQ)"
-            }
-          ],
-          "extractedTask": {
-            "has_task": false,
-            "task_priority": "low"
-          }
-        }
-      ]
+      "threadIds": ["thread-789"]
     }
   ]
- }
+}
  \`\`\`
- 
- NOTE ABOUT THE EXAMPLE: Observe that the "content" field contains EXACTLY the same text as the "Body" field in the input, with all special characters, URLs, and formatting preserved completely intact. Nothing is truncated or modified.
- 9. EXTREMELY IMPORTANT: When copying message content, you MUST output the ENTIRE body field from beginning to end including ALL text:
-   - DO NOT stop before reaching the end of the message
-   - DO NOT truncate the message at any point
-   - NEVER stop at newlines or paragraphs
-   - ALWAYS keep going until the entire message is included
-   - EVEN if it contains very long URLs or strange characters
-   - Parse the entire content WITHOUT summarizing
-   - Include ALL text from the body field without exception
- 
- 10. CRITICAL INSTRUCTION: For each message's content field:
-   - Use the ENTIRE msg.body VERBATIM without ANY changes
-   - DO NOT stop halfway through the content
-   - Keep copying even if you reach URLs, newlines, or special characters
-   - COPY THE MESSAGE IN ITS ENTIRETY - from start to finish
-   - The content field MUST match the msg.body field EXACTLY
-   - NEVER truncate the message content for ANY reason
- 
- 11. EXTREMELY IMPORTANT: Special character handling:
-   - Copy ALL characters exactly as they appear without any filtering
-   - Ensure proper escaping of quotes and backslashes in JSON
-   - If a character looks unusual or malformed, copy it anyway
-   - Do not attempt to clean, normalize, or sanitize the text - preserve it exactly
-   - URLs with percent encoding (%xx) must remain exactly as they appear
- 
- 12. CRITICAL: Do not stop copying even when:
-   - You encounter long URLs
-   - You see unusual Unicode characters
-   - You reach newlines or paragraph breaks
-   - You reach what seems like the end of meaningful content
-   - You encounter repeated text or patterns
-   - You reach marketing boilerplate or footer text
-   - You see text that seems irrelevant
- 
- 13. FOR EACH MESSAGE, COPY 100% OF THE CONTENT - NEVER LESS
- 
- --- Handling Long Content ---
- 1. Your maximum context size is sufficient to handle full email content
- 2. Use proper JSON string escaping for special characters:
-   - Backslashes \\\\ should be escaped as \\\\\\\\
-   - Double quotes " should be escaped as \\\\"
-   - Newlines should be escaped as \\\\n
-   - Tabs should be escaped as \\\\t
- 3. DO NOT use ellipsis (...) or any other truncation indicator
- 4. Do not omit any part of the content regardless of length
- 5. IMPORTANT: Avoid summarizing or paraphrasing any content
  
  --- Categorization Rules ---
  1. Important Info (Business Critical):
@@ -269,17 +171,17 @@ export function getThreadCategorizationPrompt(params: ThreadCategorizationParams
    * NOT for travel marketing or newsletters
  
  5. Newsletters: 
-Emails that are primarily informational, educational, or entertaining — not promotional or sales-driven.
-**Include if the email:**
-- Contains original content such as articles, insights, curated tips, or thoughtful commentary  
-- Provides industry updates, trend analysis, or expert perspectives  
-- Is a digest or roundup email with clear informational value (e.g. “top 5 reads this week”)  
-- Shares product or company updates *with substantial detail or context* (e.g. lessons learned, behind-the-scenes, roadmap deep dives)
-**Exclude if the email:**
-- Focuses on promoting products, discounts, or driving sales (e.g. “Shop now,” “Limited time offer”)  
-- Is a generic product announcement with no meaningful insight  
-- Is primarily marketing or ad copy  
-- Only contains headlines or links without summaries, unless they are part of a curated digest with context
+  Emails that are primarily informational, educational, or entertaining — not promotional or sales-driven.
+  **Include if the email:**
+  - Contains original content such as articles, insights, curated tips, or thoughtful commentary  
+  - Provides industry updates, trend analysis, or expert perspectives  
+  - Is a digest or roundup email with clear informational value (e.g. “top 5 reads this week”)  
+  - Shares product or company updates *with substantial detail or context* (e.g. lessons learned, behind-the-scenes, roadmap deep dives)
+  **Exclude if the email:**
+  - Focuses on promoting products, discounts, or driving sales (e.g. “Shop now,” “Limited time offer”)  
+  - Is a generic product announcement with no meaningful insight  
+  - Is primarily marketing or ad copy  
+  - Only contains headlines or links without summaries, unless they are part of a curated digest with context
 
  6. Notifications (Default Category):
    * ALL marketing and promotional emails
@@ -306,32 +208,12 @@ Emails that are primarily informational, educational, or entertaining — not pr
    - Check that all objects and arrays have proper closing brackets
    - Verify the entire response can be parsed with JSON.parse()
  2. Your response must be ONLY the JSON object with no additional text. Ensure all strings are properly terminated with closing quotes.
- 3. Put ALL emails that don't fit other categories into Notifications - it's the default category.
- 4. CRITICAL: Every thread object MUST be complete with id, subject, and messages array. NEVER output a thread with only an id field.
-
- 4. ***CRITICAL PROCESSING STEPS FOR EACH MESSAGE***:
-   a) First, save the entire message body to a variable: let content = msg.body;
-   b) Then, use that variable directly in your JSON output: "content": content
-   c) DO NOT modify, truncate, or process the content in any way between these steps
-   d) COPY THE COMPLETE BODY - including all special characters, URLs, and invisible characters
-   
- 5. ***KEY IMPLEMENTATION NOTES***:
-   - Even very long URLs must be preserved in their entirety
-   - Image tracking pixels (![](url) syntax) must be preserved exactly
-   - Special characters and unicode must be preserved
-   - Line breaks, tabs, and spaces must be preserved
-   - Your processing capacity is sufficient to handle the entire message text
-   
- 6. ***IMPORTANT - DEALING WITH COMPLEX CONTENT***:
-   - Marketing emails often include tracking codes, pixel images, and special formatting
-   - All such content MUST be preserved exactly as it appears in the input
-   - Do not stop processing when you encounter image markdown, long URLs, or other complex content
-   - Process the entire message body character by character without skipping anything`;
+ 3. Put ALL emails that don't fit other categories into Notifications - it's the default category.`;
  }
 
 // 2. Structured summary generation (using categorization results, summarize for each category)
 export function generateSummaryPrompt(params: ThreadSummarizationParams): string {
-   return `You're an AI assistant that helps small business owners stay on top of their inbox. Your job? Read the email threads in the "${params.category_name}" category and return a warm, smart, story-like summary.
+   return `You're an AI assistant that helps small business owners stay on top of their inbox. Your job? Read the email threads in the "${params.category_name}" category and return a warm, smart, story-like summary. Let's think this through step by step.
  
  --- THREAD INPUT ---
  ${params.category_threads.map(thread => `
@@ -436,7 +318,7 @@ export function generateSummaryPrompt(params: ThreadSummarizationParams): string
    "category_name": "Newsletters"
  }` : params.category_name === 'Notifications' ? `
  • Group similar alerts  
- • Mention only what’s truly worth attention  
+ • Mention only what's truly worth attention, but ALWAYS include at least 50% of the email threads in your summary
  
  Examples:
  
@@ -475,12 +357,13 @@ INCORRECT (too vague, missing formatting):
 "Here's a quick update! It looks like your denim is getting some attention. Unfortunately, the details are a bit sparse, but it seems like there's a push to get your denim stage-ready. Keep an eye out for more info soon!"
 "Here's a quick update! Shibuya Hi-Fi sent a cheerful note, though the details are missing. Meanwhile, Startup & VC shared a list of new venture capital jobs for Week 14 of 2025. They're also hosting a session on April 15 about what matters to LPs beyond returns, featuring speakers like Rodney Reisdorf and Tim Holladay."
 "Here's a quick update! Your bank confirmed that your transfer is complete. Keep an eye on your account for the updated balance."
+"There was a newsletter about the economy, though the details were a bit sparse."
 
 CORRECT (specific details, proper formatting):
 "Here's a quick update! {Levi's® Tailor Shop|thread.id} wants to help get your denim [[stage-ready for festival season|thread.id]]. They're offering custom touches like chainstitch embroidery and Western-inspired patches.\\n\\nThey've also outlined a [[simple three-step process|thread.id]] for ordering online and picking up in store for customization." 
 "Here's a quick one! {Startup & VC|thread.id} shared a list of [[new venture capital jobs for Week 14 of 2025|thread.id]]. They're also hosting a session on April 15 about what matters to LPs beyond returns, featuring speakers like Rodney Reisdorf and Tim Holladay."
 "Here's a quick update on your finances! {Chase Bank|thread.id} confirmed your [[$2,500 transfer to your savings account|thread.id]] was completed on April 7th. They mentioned it may take 24 hours for the updated balance to appear in your account."
-
+"Heads-up: You received {newsletter about the economy | thread.id} from [[The Information]], but we weren't able to retrieve its full content. While we couldn't summarize this one, you can still view it directly in your inbox."
  --- COMMON ERRORS TO AVOID ---
  • Vague summaries that miss specific details
  • Omitting sender information

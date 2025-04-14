@@ -153,10 +153,10 @@ export class EmailSyncService {
               totalProcessed: threads.length
             });
 
-            ThreadDebugLogger.log('Thread analysis complete', { 
-              summaries,
-              totalProcessed: threads.length
-            });
+            //ThreadDebugLogger.log('Thread analysis complete', { 
+            //  summaries,
+            //  totalProcessed: threads.length
+            //});
 
             console.log("Email sync complete for account:", account.email_address, stats);
 

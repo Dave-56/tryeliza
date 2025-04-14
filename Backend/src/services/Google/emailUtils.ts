@@ -34,7 +34,7 @@ export class EmailUtils extends GoogleClient {
                     snippet: msg.snippet || undefined,
                     labelIds: msg.labelIds || undefined,
                     headers: this.parseHeaders(msg.payload?.headers || []),
-                    body: await this.getEmailBody(msg.payload)
+                    body: await this.getEmailBody(msg.payload, threadId)
                 })))
             };
         } catch (error) {
@@ -58,9 +58,9 @@ export class EmailUtils extends GoogleClient {
     /**
      * Extracts the email body from the message payload
      */
-    public async getEmailBody(payload: gmail_v1.Schema$MessagePart | undefined): Promise<string> {
+    public async getEmailBody(payload: gmail_v1.Schema$MessagePart | undefined, threadId?: string): Promise<string> {
         if (!payload) {
-            ThreadDebugLogger.log('[Email Debug] No payload provided');
+            //ThreadDebugLogger.log('[Email Debug] No payload provided');
             return '';
         }
 
@@ -126,7 +126,7 @@ export class EmailUtils extends GoogleClient {
                 // Recursively check nested parts
                 if (part.parts) {
                     // ThreadDebugLogger.log('[Email Debug] Recursing into nested parts');
-                    const nestedContent = await this.getEmailBody(part);
+                    const nestedContent = await this.getEmailBody(part, threadId);
                     if (nestedContent && nestedContent.length > maxContentSize) {
                         maxContentSize = nestedContent.length;
                         htmlContent = nestedContent; // Prefer HTML from nested parts too
@@ -135,34 +135,37 @@ export class EmailUtils extends GoogleClient {
             }
             // For substantial plain text content (>1500 chars), prefer it over HTML
             if (plainTextContent && plainTextContent.length > 1500) {
-                ThreadDebugLogger.log('[Email Debug] Selected text/plain content', {
-                    reason: 'Substantial plain text available, preferring over HTML',
-                    contentLength: plainTextContent.length,
-                    sample: plainTextContent.substring(0, 50) + '...'
-                });
+                //ThreadDebugLogger.log('[Email Debug] Selected text/plain content', {
+                //    threadId: threadId || 'unknown',
+                //    reason: 'Substantial plain text available, preferring over HTML',
+                //    contentLength: plainTextContent.length,
+                //    sample: plainTextContent.substring(0, 100) + '...'
+                //});
                 return await this.cleanPlainTextEmail(plainTextContent);
             }
             else if(htmlContent) {
-                ThreadDebugLogger.log('[Email Debug] Selected text/html content', {
-                    reason: 'HTML content available',
-                    originalLength: htmlContent.length,
-                    sample: htmlContent.substring(0, 50) + '...'
-                });
+                //ThreadDebugLogger.log('[Email Debug] Selected text/html content', {
+                //    threadId: threadId || 'unknown',
+                //    reason: 'HTML content available',
+                //    originalLength: htmlContent.length,
+                //    sample: htmlContent.substring(0, 100) + '...'
+                //});
                 return await cleanEmailText(htmlContent);
             }
             // For short plain text as last resort
             else if (plainTextContent && plainTextContent.length > 0) {
-                ThreadDebugLogger.log('[Email Debug] Selected short text/plain content', {
-                    reason: 'Only short plain text available',
-                    contentLength: plainTextContent.length,
-                    sample: plainTextContent.substring(0, 50) + '...'
-                });
+                //ThreadDebugLogger.log('[Email Debug] Selected short text/plain content', {
+                //    threadId: threadId || 'unknown',
+                //    reason: 'Only short plain text available',
+                //    contentLength: plainTextContent.length,
+                //    sample: plainTextContent.substring(0, 100) + '...'
+                //});
                 return await this.cleanPlainTextEmail(plainTextContent);
             }
 
         }
 
-        ThreadDebugLogger.log('[Email Debug] No usable body content found');
+        //ThreadDebugLogger.log('[Email Debug] No usable body content found');
         return '';
     }
 
@@ -221,7 +224,7 @@ export class EmailUtils extends GoogleClient {
             const response = await this.gmail.users.messages.list({
                 userId: 'me',
                 q: `in:inbox after:${formattedDate}`,  // Gmail search query format: YYYY/MM/DD
-                maxResults: 20 // Limit to 20 messages for now - we can comment this out later
+                maxResults: 40 // Limit to 20 messages for now - we can comment this out later
             });
 
             console.log("Initial messages response:", {
@@ -371,7 +374,7 @@ export class EmailUtils extends GoogleClient {
             });
             
             if (!response.data || !response.data.payload) {
-                ThreadDebugLogger.log('[Email Debug] No data or payload for email:', emailId);
+                //ThreadDebugLogger.log('[Email Debug] No data or payload for email:', emailId);
                 return null;
             }
             
