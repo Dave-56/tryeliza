@@ -100,7 +100,6 @@ export function useEmailDigest(period: 'morning' | 'evening' = 'evening', date?:
         setIsSyncing(false);
       }
     },
-    //select: (response) => transformDailySummaryToDigest(response),    enabled: !isLoadingEmailAccounts
   });
 
   return {

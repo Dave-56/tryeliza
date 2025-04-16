@@ -80,6 +80,8 @@ export function useUser() {
               
               const displayName = profile.name || identityData.email.split('@')[0];
               const storedTimezone = localStorage.getItem(TIMEZONE_KEY) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+              console.log("timezone", storedTimezone);
               
               await supabase.auth.updateUser({
                 data: {

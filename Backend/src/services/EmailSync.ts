@@ -23,7 +23,7 @@ export class EmailSyncService {
   constructor(private agentService: AgentService) {
     this.emailProcessingService = new EmailProcessingService();
     this.emailThreadAnalysisService = new EmailThreadAnalysisService(agentService);
-    this.emailSummaryService = new EmailSummaryService();
+    this.emailSummaryService = new EmailSummaryService(agentService);
   }
 
     async syncEmails(userId: string, accountId?: number, period?: 'morning' | 'evening'): Promise<SyncResult> {
@@ -147,11 +147,22 @@ export class EmailSyncService {
             }
           }
           try {
-            const summaries = await this.emailThreadAnalysisService.generateSummaries(userId);
-            await this.emailSummaryService.storeCategoryHighlights(userId, {
-              summaries: summaries,
-              totalProcessed: threads.length
-            });
+            // Instead of directly calling the EmailThreadAnalysisService, use the EmailSummaryService
+            // which handles timezone, time range calculation, and proper summary generation
+            
+            // Get the user's timezone for proper period determination
+            let currentPeriod = period;
+            if (!currentPeriod) {
+              // If period is not specified, determine it based on user's timezone
+              const userTimezone = user.timezone || 'UTC';
+              const userLocalTime = new Date(new Date().toLocaleString('en-US', { timeZone: userTimezone }));
+              currentPeriod = userLocalTime.getHours() < 16 ? 'morning' : 'evening';
+              console.log(`Determined period '${currentPeriod}' based on user's timezone (${userTimezone})`);
+            }
+            
+            const summaries = await this.emailSummaryService.generateDailySummary(userId, currentPeriod);
+            
+            // No need to call storeCategoryHighlights as it's already done in generateDailySummary
 
             //ThreadDebugLogger.log('Thread analysis complete', { 
             //  summaries,
@@ -166,7 +177,12 @@ export class EmailSyncService {
           }
               // Update historyId using profile from GoogleServices
           const historyId = await googleServices.getLatestHistoryId();
-          await db.update(emailAccounts).set({ last_sync: new Date(), history_id: historyId }).where(eq(emailAccounts.id, account.id));
+          await db.update(emailAccounts)
+          .set({ 
+            [emailAccounts.last_sync.name]: new Date(), 
+            [emailAccounts.history_id.name]: historyId 
+          })
+          .where(eq(emailAccounts.id, account.id));
         } catch (error) {
           console.error("Error updating historyId:", error);
         }

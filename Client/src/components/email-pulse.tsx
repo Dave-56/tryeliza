@@ -71,7 +71,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                   Last run: {format(parseISO(lastUpdated), 'MMM d, h:mm a')}
                 </span>
               )}
-              <Button 
+              {/* <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-7 w-7 p-0 ml-1"
@@ -83,7 +83,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                 ) : (
                   <RefreshCcw className="h-3.5 w-3.5" />
                 )}
-              </Button>
+              </Button> */}
             </div>
           </div>
           
@@ -268,8 +268,33 @@ export function EmailPulse({ onTabChange }: InboxSummaryProps) {
   const { data: digestData, isLoading, isFetching, error, refetch } = useEmailDigest(timeOfDay, selectedDate);
   const { mutate: generateSummary, isPending: isGenerating } = useGenerateSummary();
   const { data: emailAccounts, isLoading: isLoadingAccounts } = useEmailAccounts();
-  const { user, isLoading: isLoadingUser } = useUser();
+  const { user, isLoading: isLoadingUser, isIntegratingGoogle, isGoogleSyncing } = useUser();
   const [_, setLocation] = useLocation();
+
+   // Auto-generate summary after Gmail integration completes
+   useEffect(() => {
+    // If we have email accounts and we're not currently in a loading state
+    // Also make sure we're not just in the initial loading state for digestData
+    if (emailAccounts && emailAccounts.length > 0 && !isIntegratingGoogle && !isGoogleSyncing && !isGenerating && !isLoading) {
+      // Check if we have a Google account that's active
+      const hasActiveGoogleAccount = emailAccounts.some(account => 
+        account.provider === 'google' && account.isActive
+      );
+      
+      // If we have an active Google account but no digest data yet, generate a summary
+      if (hasActiveGoogleAccount && !digestData) {
+        console.log('Auto-generating summary after Gmail integration');
+        generateSummary(
+          { period: timeOfDay, date: selectedDate },
+          {
+            onError: (error) => {
+              console.error('Error generating summary:', error);
+            }
+          }
+        );
+      }
+    }
+  }, [emailAccounts, isIntegratingGoogle, isGoogleSyncing, isGenerating, isLoading, digestData, generateSummary]);
 
   const handleDateSelect = (date: Date | null) => {
     setSelectedDate(date);
@@ -294,7 +319,25 @@ export function EmailPulse({ onTabChange }: InboxSummaryProps) {
     window.open(`https://mail.google.com/mail/u/0/#inbox/${encodedId}`, '_blank');
   };
 
-  if (isLoading || isLoadingAccounts || isLoadingUser) {
+  const isInitialLoading = isLoadingUser || isLoadingAccounts;
+  const isDataLoading = isLoading || isFetching;
+  const isLoadingState = isInitialLoading || isDataLoading || isIntegratingGoogle || isGoogleSyncing || isGenerating;
+
+  if (isLoadingState) {
+    let title = "Loading your inbox...";
+    let message = "Please wait while we securely sync and analyze your emails.";
+
+    if (isIntegratingGoogle) {
+      title = "Setting up Gmail integration...";
+      message = "Please wait while we securely connect and sync your Gmail account. This may take a moment...";
+    } else if (isGoogleSyncing) {
+      title = "Syncing your Gmail account...";
+      message = "Please wait while we sync your Gmail account. This may take a moment...";
+    } else if (isGenerating) {
+      title = "Generating your summary...";
+      message = "Please wait while we analyze your emails and create your personalized digest.";
+    }
+
     return (
       <div className="container max-w-3xl mx-auto px-4">
         <Card className="shadow-sm">
@@ -306,7 +349,10 @@ export function EmailPulse({ onTabChange }: InboxSummaryProps) {
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
               </div>
-              <h3 className="text-lg font-medium">Loading your inbox...</h3>
+              <h3 className="text-lg font-medium">{title}</h3>
+              <p className="text-sm text-muted-foreground text-center max-w-md">
+                {message}
+              </p>
             </div>
           </CardContent>
         </Card>

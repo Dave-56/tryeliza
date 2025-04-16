@@ -4,11 +4,9 @@ import { eq, and, desc, sql, inArray, or, gte, lte } from 'drizzle-orm';
 import { users,EmailAccount, emails, emailAccounts, dailySummaries, DailySummary, categorizedDailySummaries, processedEmails, tasks } from '../../db/schema.js';
 import { EmailCategory } from './types';
 import { EmailThread, EmailMessage } from '../../Types/model';
-import { emailSyncService } from '../EmailSync.js';
 import { AgentService } from '../Agent/AgentService.js';
 import { CategorizedDailySummaryRepository } from '../../repositories/CategorizedDailySummaryRepository';
 import { EmailThreadAnalysisService } from '../../services/Agent/email-thread-analysis';
-import ThreadDebugLogger from '../../utils/ThreadDebugLogger'; // Import ThreadDebugLogger
 import { GoogleService } from '../Google/GoogleService'; // Import GoogleService
 
 export class EmailSummaryService {
