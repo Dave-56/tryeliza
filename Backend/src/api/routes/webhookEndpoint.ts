@@ -53,7 +53,6 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
     try {
         // Track metrics
         webhookMetrics.totalReceived++;
-        const startTime = Date.now();
         
         console.log(" 🔔 WEBHOOK: Received request to /gmail/notifications");
         console.log(" 🔔 WEBHOOK: Request source IP:", req.ip);
@@ -85,6 +84,19 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
 
             console.log(" 🔔 WEBHOOK: Detected Google Pub/Sub notification, bypassing authentication check");
             isAuthentic = true;
+
+            // Store the message for background processing
+            const message = req.body.message;
+            if (!message?.data) {
+                return res.status(400).json({ error: 'Invalid notification format' });
+            }
+            // Queue the message for background processing
+            // This could be a job queue, a database table, or simply a process.nextTick
+            setImmediate(() => {
+                processWebhookInBackground(req.body, req.ip, req.headers as Record<string, string>);
+            });
+            // Respond immediately with success
+            return res.status(200).json({ status: 'success', message: 'Notification queued for processing' });
         } else {
             // For direct API calls, still verify the Authorization header
             isAuthentic = await WebhookProcessor.verifyPushNotification(req.header('Authorization'));
@@ -99,18 +111,25 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
             console.log("Unauthorized request");
             webhookMetrics.failedProcessing++;
             return res.status(401).json({ error: 'Unauthorized request' });
-        }
+        } 
+    } catch (error) {
+        console.error('Error in webhook endpoint:', error);
+        webhookMetrics.failedProcessing++;
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
-        // Parse and validate the message
-        const message = req.body.message;
-        if (!message?.data) {
-            console.log("Invalid notification format");
-            webhookMetrics.failedProcessing++;
-            return res.status(400).json({ error: 'Invalid notification format' });
-        }
-
-        // Check if this notification has already been processed - do this check outside the transaction
-        // to quickly return for duplicate notifications without starting a transaction
+async function processWebhookInBackground(body: WebhookGmailRequest, ip: string, headers: Record<string, string>) {
+    try {
+        const startTime = Date.now();
+        console.log(" 🔔 WEBHOOK BACKGROUND: Processing webhook");
+        console.log(" 🔔 WEBHOOK BACKGROUND: Request source IP:", ip);
+        console.log(" 🔔 WEBHOOK BACKGROUND: Headers:", JSON.stringify(headers, null, 2));
+        console.log(" 🔔 WEBHOOK BACKGROUND: Body:", JSON.stringify(body, null, 2));
+        
+        const message = body.message;
+        
+        // Check if this notification has already been processed
         const existingNotification = await db.query.webhookNotifications.findFirst({
             where: eq(webhookNotifications.notification_id, message.messageId)
         });
@@ -119,11 +138,7 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
             console.log(`🔔 WEBHOOK: Duplicate notification ${message.messageId} detected, already processed with status: ${existingNotification.status}`);
             // Return success even for duplicate notifications to prevent retries
             webhookMetrics.duplicates++;
-            return res.status(200).json({ 
-                status: 'success', 
-                message: 'Notification already processed',
-                notificationStatus: existingNotification.status
-            });
+            return;
         }
 
         // Decode the message
@@ -140,24 +155,17 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
                     notification_id: message.messageId,
                     email_address: parsedData.emailAddress,
                     history_id: parsedData.historyId,
-                    subscription: req.body.subscription,
+                    subscription: body.subscription,
                     received_at: new Date()
                 }).onConflictDoNothing();
             } catch (error) {
                 console.error('Failed to record deleted account notification:', error);
             }
             // Return success to prevent retries
-            return res.status(200).json({ status: 'success', message: 'Account no longer exists' });
+            return;
         }
-
-        if (!emailAccount.is_connected) {
-            console.error('WebhookDisconnectedAccount', { emailAccountId: emailAccount.id });
-            webhookMetrics.failedProcessing++;
-            return res.status(400).json({ error: 'Email account is not connected' });
-        }
-
-        // Process the webhook event directly
-        try {
+         // Process the webhook event directly
+         try {
             // Use a transaction with proper error handling to ensure atomicity
             await db.transaction(async (tx) => {
                 try {
@@ -227,8 +235,7 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
             webhookMetrics.successfullyProcessed++;
             webhookMetrics.processingTime.push(Date.now() - startTime);
             
-            console.log("Webhook processed successfully");
-            return res.status(200).json({ status: 'success' });
+            console.log("Webhook processed successfully in background");
         } catch (processingError) {
             console.error('Error processing webhook:', processingError);
             webhookMetrics.failedProcessing++;
@@ -272,14 +279,14 @@ router.post('/gmail/notifications', webhookLimiter, async (req: Request<{}, {}, 
                 console.error('Failed to update notification status:', updateError);
             }
             
-            return res.status(500).json({ error: 'Error processing webhook' });
+            console.error('Background webhook processing failed');
         }
     } catch (error) {
-        console.error('Error in webhook endpoint:', error);
+        console.error('Error in background webhook processing:', error);
         webhookMetrics.failedProcessing++;
-        return res.status(500).json({ error: 'Internal server error' });
+        return;
     }
-});
+}
 
 // Add a route to manually trigger webhook renewal for testing
 router.post('/gmail/renew-watch', async (req: Request, res: Response) => {
