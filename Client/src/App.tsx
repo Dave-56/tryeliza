@@ -22,6 +22,7 @@ import { Loader2 } from "lucide-react";
 import VerifyEmail from "@/pages/verify-email";
 import EmailVerifyCallback from "@/pages/email-verify-callback";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
+import FollowupTracker from "@/components/followup-tracker";
 
 function Router() {
   const { user, isLoading } = useUser();
@@ -92,6 +93,9 @@ function Router() {
           <Route path="/analytics">
             <AnalyticsPanel />
           </Route>
+          {/* <Route path="/followup-tracker">
+            <FollowupTracker onTabChange={setActiveTab} />
+          </Route> */}
           <Route path="/settings">
             <SettingsPanel />
           </Route>

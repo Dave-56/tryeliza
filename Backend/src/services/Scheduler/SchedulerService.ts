@@ -64,12 +64,12 @@ export class SchedulerService {
 
   private scheduleJobsForTimezone(timezone: string) {
     try {
-      // Morning summary at 7 AM in the timezone
-      const morningJob = cron.schedule('0 7 * * *', async () => {
+      // Morning summary at 6 AM in the timezone
+      const morningJob = cron.schedule('0 6 * * *', async () => {
         const now = new Date();
-        // Check if it's actually 7 AM in this timezone
+        // Check if it's actually 6 AM in this timezone
         const tzTime = now.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', hour12: false });
-        if (parseInt(tzTime) === 7) {
+        if (parseInt(tzTime) === 6) {
           console.log(`Running morning summary job for timezone: ${timezone}`);
           await this.generateSummariesForTimezone(timezone, 'morning');
         }
@@ -77,13 +77,13 @@ export class SchedulerService {
         timezone
       });
 
-      // Evening summary at 4 PM in the timezone
-      const eveningJob = cron.schedule('0 16 * * *', async () => {
+      // Evening summary at 3 PM in the timezone
+      const eveningJob = cron.schedule('0 15 * * *', async () => {
         try {
           const now = new Date();
           console.log(`Evening job triggered for ${timezone} at ${now.toISOString()}`);
           
-          // Check if it's actually 4 PM in this timezone
+          // Check if it's actually 3 PM in this timezone
           const tzTime = now.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', hour12: false });
           const hour = parseInt(tzTime);
           
@@ -94,11 +94,11 @@ export class SchedulerService {
             return;
           }
           
-          if (hour === 16) {
+          if (hour === 15) {
             console.log(`Running evening summary job for timezone: ${timezone}`);
             await this.generateSummariesForTimezone(timezone, 'evening');
           } else {
-            console.log(`Skipping evening summary - wrong hour: ${hour} !== 16`);
+            console.log(`Skipping evening summary - wrong hour: ${hour} !== 15`);
           }
         } catch (error) {
           console.error(`Error in evening job for ${timezone}:`, error);

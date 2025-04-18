@@ -71,7 +71,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                   Last run: {format(parseISO(lastUpdated), 'MMM d, h:mm a')}
                 </span>
               )}
-              {/* <Button 
+              <Button 
                 variant="ghost" 
                 size="sm" 
                 className="h-7 w-7 p-0 ml-1"
@@ -83,7 +83,7 @@ function WeeklyCalendar({ lastUpdated, refetch, isFetching, selectedDate, onDate
                 ) : (
                   <RefreshCcw className="h-3.5 w-3.5" />
                 )}
-              </Button> */}
+              </Button>
             </div>
           </div>
           

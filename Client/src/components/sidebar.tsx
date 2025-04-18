@@ -32,6 +32,12 @@ const menuItems = [
     path: "/email-digest",
     value: "email-digest",
   },
+  // {
+  //   title: "Followup Tracker",
+  //   icon: <Inbox className="h-4 w-4" />,
+  //   path: "/followup-tracker",
+  //   value: "followup-tracker",
+  // },
   {
     title: "Tasks",
     icon: <LayoutGrid className="h-4 w-4" />,
