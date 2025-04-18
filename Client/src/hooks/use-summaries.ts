@@ -143,7 +143,9 @@ export function useGenerateSummary() {
       // Show success toast
       toast({
         title: "Success",
-        description: response.data?.message || "Summary generated successfully",
+        description: response.data?.message
+          ? `${response.data.message} Please reload the page to see your summaries.`
+          : "Summary generated successfully. Please reload the page to see your summaries.",
       });
 
       // Invalidate and refetch the email digest query
