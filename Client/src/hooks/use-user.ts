@@ -117,7 +117,7 @@ export function useUser() {
           
           console.log('Gmail integration set up successfully');
           toast({
-            description: "Gmail integration set up automatically!",
+            description: "Gmail integration set up automatically! Please reload the page to see your summaries.",
           });
           
           // Invalidate queries in sequence
