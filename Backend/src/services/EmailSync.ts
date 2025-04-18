@@ -27,6 +27,12 @@ export class EmailSyncService {
   }
 
     async syncEmails(userId: string, accountId?: number, period?: 'morning' | 'evening'): Promise<SyncResult> {
+    // ThreadDebugLogger.log('[EmailSyncService.syncEmails] called', {
+    //   userId,
+    //   accountId,
+    //   period,
+    //   stack: new Error().stack,
+    // });
     try {
       // Fetch active email accounts for the user based on the parameters
       let activeEmailAccounts;
@@ -107,25 +113,39 @@ export class EmailSyncService {
             allThreads.push(preservedThread);
           });
 
+          // OPTIMIZATION: Generate summaries first using the already fetched threads
+          try {
+            // Get the user's timezone for proper period determination
+            let currentPeriod = period;
+            if (!currentPeriod) {
+              // If period is not specified, determine it based on user's timezone
+              const userTimezone = user.timezone || 'UTC';
+              const userLocalTime = new Date(new Date().toLocaleString('en-US', { timeZone: userTimezone }));
+              currentPeriod = userLocalTime.getHours() < 16 ? 'morning' : 'evening';
+              console.log(`Determined period '${currentPeriod}' based on user's timezone (${userTimezone})`);
+            }
+            
+            // Pass the already fetched threads to avoid redundant Gmail API calls
+            const summaries = await this.emailSummaryService.generateDailySummaryFromThreads(
+              userId, 
+              currentPeriod, 
+              threads
+            );
+            
+            console.log("Generated summaries for account:", account.email_address, 
+              summaries ? "Summary generated successfully" : "No summary generated");
+
+          } catch (error) {
+            console.error("Error generating summaries:", error);
+            // Continue with individual thread processing even if summary generation fails
+          }
+
           // Process all threads in batches of 20
           for (let i = 0; i < threads.length; i += 20) {
             const threadsToProcess = threads.slice(i, Math.min(i + 20, threads.length));
             
             try {
-              // const isAllThreadsCategorized = await this.emailThreadAnalysisService.categorizeThreadBatch(
-              //   threadsToProcess, 
-              //   userId,
-              //   threads.length
-              // );
-
-              // ThreadDebugLogger.log('Batch categorization status', { 
-              //   isAllThreadsCategorized,
-              //   batchSize: threadsToProcess.length,
-              //   totalThreads: threads.length,
-              //   processedUpTo: i + threadsToProcess.length
-              // });
-
-              //Process individual threads for task extraction
+              // Process individual threads for task extraction
               for (const thread of threadsToProcess) {
                 try {
                   const categorization = await this.emailProcessingService.categorizeEmail(account, thread);
@@ -146,35 +166,8 @@ export class EmailSyncService {
               stats.failed += threadsToProcess.length;
             }
           }
-          try {
-            // Instead of directly calling the EmailThreadAnalysisService, use the EmailSummaryService
-            // which handles timezone, time range calculation, and proper summary generation
-            
-            // Get the user's timezone for proper period determination
-            let currentPeriod = period;
-            if (!currentPeriod) {
-              // If period is not specified, determine it based on user's timezone
-              const userTimezone = user.timezone || 'UTC';
-              const userLocalTime = new Date(new Date().toLocaleString('en-US', { timeZone: userTimezone }));
-              currentPeriod = userLocalTime.getHours() < 16 ? 'morning' : 'evening';
-              console.log(`Determined period '${currentPeriod}' based on user's timezone (${userTimezone})`);
-            }
-            
-            const summaries = await this.emailSummaryService.generateDailySummary(userId, currentPeriod);
-            
-            // No need to call storeCategoryHighlights as it's already done in generateDailySummary
-
-            //ThreadDebugLogger.log('Thread analysis complete', { 
-            //  summaries,
-            //  totalProcessed: threads.length
-            //});
-
-            console.log("Email sync complete for account:", account.email_address, stats);
-
-          } catch (error) {
-            console.error("Error processing threads:", error);
-            stats.failed += threads.length;
-          }
+          
+          console.log("Email sync complete for account:", account.email_address, stats);
               // Update historyId using profile from GoogleServices
           const historyId = await googleServices.getLatestHistoryId();
           await db.update(emailAccounts)

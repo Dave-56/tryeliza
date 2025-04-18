@@ -20,6 +20,66 @@ export class EmailSummaryService {
     this.threadAnalysisService = new EmailThreadAnalysisService(this.agentService);
   }
 
+  /**
+   * Generate daily summary using threads that were already fetched during sync
+   * This optimizes the initial sync process by avoiding redundant API calls
+   */
+  async generateDailySummaryFromThreads(userId: string, period: 'morning' | 'evening', prefetchedThreads: EmailThread[]) {
+    // Start a transaction
+    return await db.transaction(async (tx) => {
+      try {
+        console.log(`Using ${prefetchedThreads.length} pre-fetched threads for summary generation`);
+        
+        const timezone = await this.getUserTimezone(tx, userId);
+        
+        // Calculate time range based on period (still needed for record-keeping)
+        // const timeRange = this.calculateTimeRange(period, timezone);
+        
+        // Use the pre-fetched threads directly instead of fetching again
+        let threads = prefetchedThreads;
+        
+        // If no threads were provided, log a message but don't try to fetch again
+        // since this method is specifically for using pre-fetched threads
+        if(!threads.length) {
+          console.log('No pre-fetched threads provided for summary generation');
+          return null;
+        }
+        
+        console.log(`Processing ${threads.length} pre-fetched threads for analysis`);
+        
+        // Use EmailThreadAnalysisService for categorization and summarization
+        const analysisService = new EmailThreadAnalysisService(this.agentService);
+        
+        // Categorize all threads
+        const allThreadsCategorized = await analysisService.categorizeThreadBatch(
+          threads,
+          userId,
+          threads.length // total threads expected
+        );
+
+        if (!allThreadsCategorized) {
+          throw new Error('Failed to categorize all threads');
+        }
+
+        // Generate summaries by category
+        const summaries = await analysisService.generateSummaries(userId);
+        await this.storeCategoryHighlights(userId, {
+          summaries: summaries,
+          totalProcessed: threads.length
+        });
+
+        if(!summaries) {
+          console.log(`No recent summary found for user ${userId} in the specified time range`)
+          return null;
+        }
+        return summaries;
+      } catch (error) {
+        console.error('Error generating daily summary from pre-fetched threads:', error);
+        throw error;
+      }
+    });
+  }
+
   async generateDailySummary(userId: string, period: 'morning' | 'evening') {
     // Start a transaction
     return await db.transaction(async (tx) => {
@@ -208,22 +268,69 @@ export class EmailSummaryService {
       
       console.log(`Using date ${today} and period ${period}`);
 
-      // Store using repository
-      try {
-        await this.categorizedDailySummaryRepository.upsertCategorySummaries(
-          userId,
-          userDate, // Use our timezone-aware date instead of new Date()
-          period,
-          summaries.summaries,
-          userTimezone.toString() // Convert timezone object to string
+      // Deduplicate by category_name and key_highlights
+      const uniqueSummaries: { [key in EmailCategory]?: { key_highlights: string; category_name: EmailCategory } } = {};
+
+      for (const [category, summary] of Object.entries(summaries.summaries)) {
+        // Use a normalized signature for deduplication (see your memories)
+        const signature = (summary.category_name + '|' + summary.key_highlights).toLowerCase().trim();
+        if (!Object.values(uniqueSummaries).some(s => (s.category_name + '|' + s.key_highlights).toLowerCase().trim() === signature)) {
+          uniqueSummaries[category as EmailCategory] = summary;
+        }
+      }
+      
+
+      // Check for existing summary for this user/date/period
+      const existingSummary = await this.categorizedDailySummaryRepository.findByDateAndUser(
+        userId,
+        today,
+        period
+      );
+
+      let shouldUpsert = false;
+      if (!existingSummary) {
+        shouldUpsert = Object.keys(uniqueSummaries).length > 0;
+      } else {
+        // Compare existing categories_summary with uniqueSummaries
+        // categories_summary is likely an array, convert to a map for comparison
+        const existingMap = new Map(
+          (existingSummary.categories_summary || []).map((item: any) => [
+            (item.category_name + '|' + item.key_highlights).toLowerCase().trim(),
+            item
+          ])
         );
-        console.log('Successfully stored category highlights');
-      } catch (dbError) {
-        console.error('Error storing category highlights in database:', dbError);
-        throw dbError; // Re-throw to be caught by outer try-catch
+        for (const summary of Object.values(uniqueSummaries)) {
+          const sig = (summary.category_name + '|' + summary.key_highlights).toLowerCase().trim();
+          if (!existingMap.has(sig)) {
+            shouldUpsert = true;
+            break;
+          }
+        }
+        // Also check if any categories have been removed (i.e., the new set is smaller)
+        if (!shouldUpsert && (Object.keys(uniqueSummaries).length !== existingMap.size)) {
+          shouldUpsert = true;
+        }
       }
 
-      return true;
+      if (shouldUpsert) {
+        try {
+          await this.categorizedDailySummaryRepository.upsertCategorySummaries(
+            userId,
+            userDate, // Use our timezone-aware date instead of new Date()
+            period,
+            uniqueSummaries,
+            userTimezone.toString() // Convert timezone object to string
+          );
+          console.log('Successfully stored category highlights');
+        } catch (dbError) {
+          console.error('Error storing category highlights in database:', dbError);
+          throw dbError; // Re-throw to be caught by outer try-catch
+        }
+        return true;
+      } else {
+        console.log('No changes to category highlights; skipping upsert.');
+        return true;
+      }
     } catch (error) {
       console.error('Error storing category highlights:', error);
       return false;

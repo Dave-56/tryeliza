@@ -117,10 +117,8 @@ export class CategorizedDailySummaryRepository extends BaseRepository<Categorize
       key_highlights: data.key_highlights
     }));
 
-    // Combine existing and new summaries
-    const mergedSummaries = existing?.categories_summary 
-      ? [...existing.categories_summary, ...newSummaries]
-      : newSummaries;
+    // Always overwrite with the new summaries (no merging)
+    const mergedSummaries = newSummaries;
 
     const data = {
       user_id: userId,
