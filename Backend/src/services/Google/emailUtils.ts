@@ -224,7 +224,7 @@ export class EmailUtils extends GoogleClient {
             const response = await this.gmail.users.messages.list({
                 userId: 'me',
                 q: `in:inbox after:${formattedDate}`,  // Gmail search query format: YYYY/MM/DD
-                maxResults: 40 // Limit to 20 messages for now - we can comment this out later
+                maxResults: 20 // Limit to 20 messages for now - we can comment this out later
             });
 
             console.log("Initial messages response:", {
