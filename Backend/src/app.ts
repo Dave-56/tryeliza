@@ -64,6 +64,32 @@ app.get('/api/debug-cors', (req, res) => {
     });
 });
 
+// Debug endpoint to manually trigger summary generation
+app.get('/api/debug-trigger-summary', async (req, res) => {
+    try {
+        const period = (req.query.period as 'morning' | 'evening') || 'morning';
+        const timezone = req.query.timezone as string;
+        
+        console.log(`[${new Date().toISOString()}] Manually triggering ${period} summary${timezone ? ` for timezone ${timezone}` : ''}`);
+        
+        await schedulerService.manuallyTriggerSummary(period, timezone);
+        
+        res.json({ 
+            success: true, 
+            message: `Summary generation triggered for ${period}${timezone ? ` in timezone ${timezone}` : ''}`,
+            timestamp: new Date().toISOString(),
+            serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        });
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error triggering summary:`, error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to trigger summary',
+            message: error instanceof Error ? error.message : String(error)
+        });
+    }
+});
+
 const corsOptions = {
     origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
       const timestamp = new Date().toISOString();
