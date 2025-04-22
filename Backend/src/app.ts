@@ -29,7 +29,7 @@ dotenv.config({ path: process.env.NODE_ENV === 'production' ? '.env.production' 
 
 // Initialize and start the scheduler
 const schedulerService = new SchedulerService(new AgentService());
-schedulerService.startScheduledJobs();
+//schedulerService.startScheduledJobs();
 // Initialize the waiting task scheduler
 initializeWaitingTaskScheduler();
 
@@ -40,21 +40,54 @@ const PORT: number = parseInt(process.env.PORT || '5001', 10);
 // CORS configuration
 const allowedOrigins: string[] = [
     process.env.FRONTEND_URL!,
-    'http://localhost:3001'
+    'http://localhost:3001',
+    'https://app.tryeliza.ai',
+    'app.tryeliza.ai' // Include without https:// prefix
 ];
+
+// Debug endpoint to check headers
+app.get('/api/debug-cors', (req, res) => {
+    console.log('Debug CORS headers:', {
+        origin: req.headers.origin,
+        host: req.headers.host,
+        referer: req.headers.referer,
+        'user-agent': req.headers['user-agent']
+    });
+    res.json({
+        message: 'CORS debug info',
+        headers: req.headers,
+        allowedOrigins: allowedOrigins,
+        env: {
+            NODE_ENV: process.env.NODE_ENV,
+            FRONTEND_URL: process.env.FRONTEND_URL
+        }
+    });
+});
 
 const corsOptions = {
     origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-      console.log('Received request from origin:', origin);
-      console.log('Allowed origins:', allowedOrigins);
-      // Allow requests with no origin (like mobile apps or curl requests) 
+      const timestamp = new Date().toISOString();
+      console.log(`[${timestamp}] Received request from origin:`, origin);
+      console.log(`[${timestamp}] Allowed origins:`, allowedOrigins);
+      
+      // Allow requests with no origin (like mobile apps, curl requests, or preflight OPTIONS)
       if (!origin) {
-        // For requests with no origin, explicitly set the header to the frontend URL
+        console.log(`[${timestamp}] Request has no origin, allowing access`);
         callback(null, true);
-      } else if (allowedOrigins.includes(origin)) {
+        return;
+      }
+      
+      // Check if the origin matches any allowed origins
+      // Also check without https:// prefix since some browsers/configurations might strip it
+      const originWithoutProtocol = origin.replace(/^https?:\/\//, '');
+      
+      if (allowedOrigins.includes(origin) || 
+          allowedOrigins.includes(originWithoutProtocol) ||
+          allowedOrigins.some(allowed => allowed.includes(originWithoutProtocol))) {
+        console.log(`[${timestamp}] Origin ${origin} is allowed`);
         callback(null, true);
       } else {
-        console.error(`CORS blocked request from origin: ${origin}`);
+        console.error(`[${timestamp}] CORS blocked request from origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -142,8 +175,15 @@ async function initializeApp() {
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      // Initialize and start the scheduler
-      schedulerService.startScheduledJobs();
+      
+      // Initialize and start the scheduler with detailed logging
+      console.log(`[${new Date().toISOString()}] Initializing summary scheduler...`);
+      try {
+        schedulerService.startScheduledJobs();
+        console.log(`[${new Date().toISOString()}] Summary scheduler successfully initialized`);
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] Failed to initialize summary scheduler:`, error);
+      }
 
       // Set up Gmail webhook renewal (runs every 6 hours)
       setInterval(async () => {
